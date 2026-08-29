@@ -113,7 +113,7 @@ def parse_regulation(md_path: str | Path) -> Regulation:
             item_type, number = detected
             # Keep the section heading in section text; subsection text starts
             # at the first subsection's following content.
-            content = [line] if item_type == "section" else []
+            content = [line] if item_type in {"section", "subsection"} else []
 
             if item_type == "chapter":
                 chapter = Chapter(no=int(number))

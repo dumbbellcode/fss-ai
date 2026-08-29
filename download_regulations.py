@@ -1,5 +1,6 @@
 import requests
-from urllib.parse import urljoin
+import re
+from urllib.parse import unquote, urljoin
 from pathlib import Path
 
 BASE_URL = "https://stg-old.fssai.gov.in"
@@ -7,6 +8,30 @@ REGULATIONS_PAGE = "https://stg-old.fssai.gov.in/cms/food-safety-and-standards-r
 
 OUTPUT_DIR = Path(__file__).resolve().parent / "assets" / "regulations"
 OUTPUT_DIR.mkdir(exist_ok=True)
+AMENDMENTS_PAGE = "https://www.fssai.gov.in/food-law/regulations/amendments/import"
+SITE_ROOT = "https://www.fssai.gov.in"
+
+AMENDMENT_CHUNK_PREFIXES = {
+    1: "LicensingRegistrationAmendments",
+    2: "FoodProductsAmendments",
+    3: "ProhibitionSalesAmendments",
+    4: "ContaminantsToxinsAmendments",
+    5: "LaboratorySamplingAmendments",
+    6: "NutraceuticalsAmendments",
+    8: "ImportAmendments",
+    9: "NonSpecificFoodAmendments",
+    10: "OrganicFoodAmendments",
+    11: "AlcoholicBeveragesAmendments",
+    12: "FortificationFoodAmendments",
+    15: "AdvertisingClaimsAmendments",
+    16: "PackagingAmendments",
+    19: "InfantNutritionAmendments",
+    20: "LabellingDisplayAmendments",
+    22: "VeganFoodsAmendments",
+    23: "TransactionBusinessAmendments",
+    24: "TransactionBusinessCACAmendments",
+    26: "TransactionBusinessSPSCAmendments",
+}
 
 REGULATIONS = [
     {
@@ -183,6 +208,8 @@ def download_file(url, dest_path):
     try:
         response = requests.get(url, timeout=60, stream=True)
         response.raise_for_status()
+        if "html" in response.headers.get("content-type", "").lower():
+            raise RuntimeError("server returned HTML instead of a PDF")
         with open(dest_path, 'wb') as f:
             for chunk in response.iter_content(chunk_size=8192):
                 f.write(chunk)
@@ -191,6 +218,53 @@ def download_file(url, dest_path):
     except Exception as e:
         print(f"Failed to download {url}: {e}")
         return False
+
+
+def amendment_urls(regulation_number):
+    chunk_prefix = AMENDMENT_CHUNK_PREFIXES.get(regulation_number)
+    if not chunk_prefix:
+        return []
+
+    page = requests.get(AMENDMENTS_PAGE, timeout=60)
+    page.raise_for_status()
+    script_match = re.search(r'<script[^>]+src="([^"]+\.js)"', page.text)
+    if not script_match:
+        raise RuntimeError("Could not find the FSSAI website JavaScript bundle")
+
+    bundle_url = urljoin(AMENDMENTS_PAGE, script_match.group(1))
+    bundle = requests.get(bundle_url, timeout=60)
+    bundle.raise_for_status()
+    chunk_match = re.search(
+        rf'assets/{re.escape(chunk_prefix)}-[A-Za-z0-9_-]+\.js', bundle.text
+    )
+    if not chunk_match:
+        raise RuntimeError(f"Could not find the amendment bundle for regulation {regulation_number}")
+
+    chunk_url = urljoin(bundle_url, chunk_match.group(0).removeprefix("assets/"))
+    chunk = requests.get(chunk_url, timeout=60)
+    chunk.raise_for_status()
+    base_match = re.search(r'const ([A-Za-z_$][\w$]*)="([^"]+)"', chunk.text)
+    if not base_match:
+        raise RuntimeError(f"Could not find the amendment PDF base path for regulation {regulation_number}")
+
+    base_variable, base_path = base_match.groups()
+    filenames = re.findall(rf'href:`\$\{{{re.escape(base_variable)}\}}/([^`]+\.pdf)`', chunk.text)
+    return [urljoin(SITE_ROOT, f"{base_path}/{filename}") for filename in filenames]
+
+
+def download_amendments(regulation_number, reg_dir):
+    urls = amendment_urls(regulation_number)
+    if not urls:
+        print("  No Amendments available")
+        return
+
+    amendments_dir = reg_dir / "amendments"
+    amendments_dir.mkdir(exist_ok=True)
+    print(f"  Downloading {len(urls)} Amendments...")
+    for index, url in enumerate(urls, start=1):
+        filename = unquote(url.rsplit("/", 1)[-1])
+        dest = amendments_dir / f"{index:02d}_{filename}"
+        download_file(url, dest)
 
 def main():
     for reg in REGULATIONS:
@@ -213,6 +287,11 @@ def main():
             download_file(comp_url, dest)
         else:
             print(f"  No Compendium available")
+
+        try:
+            download_amendments(reg["num"], reg_dir)
+        except Exception as error:
+            print(f"  Failed to discover Amendments: {error}")
 
 if __name__ == "__main__":
     main()

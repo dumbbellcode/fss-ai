@@ -87,6 +87,31 @@ def _text(lines: list[str]) -> str:
     return "\n".join(line.rstrip() for line in lines).strip()
 
 
+def _is_incremental_section(number: str, chapter: Chapter | None) -> bool:
+    if chapter is None:
+        return False
+    chapter_no, section_no = map(int, number.split("."))
+    if chapter_no != chapter.no:
+        return False
+    if not chapter.sections:
+        return True
+    previous_chapter_no, previous_section_no = map(int, chapter.sections[-1].no.split("."))
+    return chapter_no == previous_chapter_no and section_no == previous_section_no + 1
+
+
+def _is_incremental_subsection(number: str, section: Section | None) -> bool:
+    if section is None:
+        return False
+    chapter_no, section_no, subsection_no = map(int, number.split("."))
+    parent_chapter_no, parent_section_no = map(int, section.no.split("."))
+    if (chapter_no, section_no) != (parent_chapter_no, parent_section_no):
+        return False
+    if not section.sub_sections:
+        return subsection_no == 1
+    previous = section.sub_sections[-1].no.split(".")
+    return subsection_no == int(previous[-1]) + 1
+
+
 def parse_regulation(md_path: str | Path) -> Regulation:
     """Parse a Markdown regulation into its structured representation."""
     lines = Path(md_path).read_text(encoding="utf-8").splitlines()
@@ -114,6 +139,16 @@ def parse_regulation(md_path: str | Path) -> Regulation:
     content: list[str] = []
     for line in lines:
         detected = detect_item(line)
+        if detected:
+            item_type, number = detected
+            if item_type == "section" and not _is_incremental_section(number, chapter):
+                detected = None
+            elif item_type == "subsection" and not _is_incremental_subsection(number, section):
+                detected = None
+            elif item_type in {"section", "subsection"} and schedule is not None:
+                detected = None
+            elif item_type == "annexure" and schedule is None:
+                detected = None
         if detected:
             finish_item()
             item_type, number = detected

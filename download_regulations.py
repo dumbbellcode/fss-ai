@@ -5,7 +5,7 @@ from pathlib import Path
 BASE_URL = "https://stg-old.fssai.gov.in"
 REGULATIONS_PAGE = "https://stg-old.fssai.gov.in/cms/food-safety-and-standards-regulations.php"
 
-OUTPUT_DIR = Path(__file__).resolve().parent / "assets"
+OUTPUT_DIR = Path(__file__).resolve().parent / "assets" / "regulations"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
 REGULATIONS = [

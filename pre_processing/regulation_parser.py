@@ -56,7 +56,7 @@ SUBSECTION_RE = re.compile(r"^(\d+)\s*\.\s*(\d+)\s*\.\s*(\d+)\b")
 SECTION_RE = re.compile(r"^(\d+)\s*\.\s*(\d+)\s*(?::|\s|$)")
 SCHEDULE_RE = re.compile(r"^SCHEDULE\s*-?\s*([0-9]+|[IVXLCDM]+)\s*$", re.IGNORECASE)
 ANNEXURE_RE = re.compile(r"^ANNEXURE\s*-?\s*(.+?)\s*$", re.IGNORECASE)
-FORM_RE = re.compile(r"^['\"]?FORM(?:\s*-?\s*|\s+)(.+?)['\"]?\s*$", re.IGNORECASE)
+FORM_RE = re.compile(r"^FORM\s+['\"]?([A-Z0-9]+(?:-[A-Z0-9]+)*)['\"]?$", re.IGNORECASE)
 
 
 def detect_item(line: str) -> tuple[ItemType, str] | None:
@@ -68,8 +68,10 @@ def detect_item(line: str) -> tuple[ItemType, str] | None:
         return "schedule", match.group(1)
     if match := ANNEXURE_RE.fullmatch(value):
         return "annexure", match.group(1).strip(" '\"")
+    if len(value) >= 2 and value[0] in "'\"" and value[-1] == value[0]:
+        value = value[1:-1].strip()
     if match := FORM_RE.fullmatch(value):
-        return "form", match.group(1).strip(" '\"")
+        return "form", match.group(1)
     if match := SUBSECTION_RE.match(value):
         return "subsection", ".".join(match.groups())
     if match := SECTION_RE.match(value):

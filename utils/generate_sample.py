@@ -12,19 +12,28 @@ from pre_processing.cleanup_markdown import cleanup_regulation
 from pre_processing.regulation_parser import parse_regulation
 from utils.pdf_to_md import ConversionMethod, convert_pdf
 
+SAMPLE_DIRECTORIES = [
+    PROJECT_ROOT / "assets/regulations/01_Licensing_and_Registration_of_Food_Businesses",
+    PROJECT_ROOT / "assets/regulations/02_Food_Products_Standards_and_Food_Additives",
+]
+
 
 def process_pdf(pdf_path: Path, method: ConversionMethod) -> None:
     markdown_path = convert_pdf(pdf_path, method)
     cleaned_path = pdf_path.with_name(f"{pdf_path.stem}.cleaned.md")
-    json_path = pdf_path.with_name(f"{pdf_path.stem}.cleaned.json")
 
     cleanup_regulation(markdown_path, cleaned_path)
-    result = parse_regulation(cleaned_path)
-    json_path.write_text(result.model_dump_json(indent=2) + "\n", encoding="utf-8")
 
     print(f"Processed: {pdf_path}")
     print(f"  Markdown: {markdown_path.name}")
     print(f"  Cleaned:  {cleaned_path.name}")
+
+    if markdown_path.name != "Regulation.md":
+        return
+
+    json_path = pdf_path.with_name(f"{pdf_path.stem}.cleaned.json")
+    result = parse_regulation(cleaned_path)
+    json_path.write_text(result.model_dump_json(indent=2) + "\n", encoding="utf-8")
     print(f"  JSON:     {json_path.name}")
 
 
@@ -33,30 +42,14 @@ def main() -> None:
         description="Run the PDF-to-JSON preprocessing pipeline for sample directories."
     )
     parser.add_argument(
-        "--sample-size",
-        type=int,
-        default=2,
-        help="Number of regulation directories to process (default: 2)",
-    )
-    parser.add_argument(
         "--method",
         choices=("markitdown", "pymupdf"),
         default="markitdown",
         help="PDF conversion method (default: markitdown)",
     )
-    parser.add_argument(
-        "--assets-dir",
-        type=Path,
-        default=PROJECT_ROOT / "assets" / "regulations",
-        help="Directory containing regulation directories",
-    )
     args = parser.parse_args()
 
-    directories = sorted(path for path in args.assets_dir.iterdir() if path.is_dir())
-    if args.sample_size < 1 or args.sample_size > len(directories):
-        parser.error(f"--sample-size must be between 1 and {len(directories)}")
-
-    for directory in directories[: args.sample_size]:
+    for directory in SAMPLE_DIRECTORIES:
         for pdf_path in sorted(directory.glob("*.pdf")):
             process_pdf(pdf_path, args.method)
 

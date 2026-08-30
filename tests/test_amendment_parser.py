@@ -5,8 +5,8 @@ from unittest.mock import MagicMock, patch
 from pre_processing.amendment_parser import AmendmentItem, AmendmentList, parse_amendment
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-AMENDMENTS_DIR = PROJECT_ROOT / "assets/regulations/01_Licensing_and_Registration_of_Food_Businesses/amendments"
-SAMPLE_MD = AMENDMENTS_DIR / "01_273797.cleaned.md"
+FIXTURES_DIR = PROJECT_ROOT / "tests" / "fixtures"
+SAMPLE_MD = FIXTURES_DIR / "01_273797.cleaned.md"
 
 
 def _fake_llm(result: AmendmentList) -> MagicMock:

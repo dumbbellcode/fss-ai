@@ -10,11 +10,9 @@ from pre_processing.apply_amendment import apply_amendment
 from pre_processing.regulation_parser import Regulation
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-REGULATION_JSON = (
-    PROJECT_ROOT
-    / "assets/regulations/01_Licensing_and_Registration_of_Food_Businesses/Regulation.cleaned.json"
-)
-AMENDMENTS_DIR = PROJECT_ROOT / "assets/regulations/01_Licensing_and_Registration_of_Food_Businesses/amendments"
+FIXTURES_DIR = PROJECT_ROOT / "tests" / "fixtures"
+REGULATION_JSON = FIXTURES_DIR / "regulation.json"
+AMENDMENTS_DIR = FIXTURES_DIR
 
 
 def _regulation() -> Regulation:
@@ -61,7 +59,7 @@ def test_find_target_no_match():
 
 
 def test_apply_schedule_amendment_writes_json(tmp_path):
-    amendment_json = AMENDMENTS_DIR / "01_273797.cleaned.json"
+    amendment_json = AMENDMENTS_DIR / "01_273797.json"
     output = tmp_path / "Regulation.final.json"
     with (
         patch("pre_processing.apply_amendment.ChatOpenAI"),
@@ -82,7 +80,7 @@ def test_apply_schedule_amendment_writes_json(tmp_path):
 
 
 def test_apply_subregulation_and_insert(tmp_path):
-    amendment_json = AMENDMENTS_DIR / "02_1_Notification dt 10_03_2026.cleaned.json"
+    amendment_json = AMENDMENTS_DIR / "02_1_Notification.json"
     output = tmp_path / "Regulation.final.json"
     with (
         patch("pre_processing.apply_amendment.ChatOpenAI"),
@@ -105,7 +103,7 @@ def test_apply_subregulation_and_insert(tmp_path):
 def test_default_output_path_naming(tmp_path):
     regulation_copy = tmp_path / "Regulation.cleaned.json"
     regulation_copy.write_text(REGULATION_JSON.read_text(encoding="utf-8"), encoding="utf-8")
-    amendment_json = AMENDMENTS_DIR / "03_Gazette_Notification_Quality_Vegetable_Oil_03_11_2017.cleaned.json"
+    amendment_json = AMENDMENTS_DIR / "03_Quality_Vegetable_Oil.json"
     with (
         patch("pre_processing.apply_amendment.ChatOpenAI"),
         patch("pre_processing.apply_amendment._llm_apply", return_value="UPDATED-TEXT"),

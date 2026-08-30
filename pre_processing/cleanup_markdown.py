@@ -72,10 +72,19 @@ def cleanup_amendment(md_path: str | Path, output_md_path: str | Path) -> None:
     }
 
     # Page extraction can split the page number and gazette header over lines.
+    def is_header_marker(line: str) -> bool:
+        return bool(re.fullmatch(r"(?:\d+|[NT]|\[[^\]]+\])", normalized(line), re.IGNORECASE))
+
     for index in tuple(header_indexes):
-        for adjacent in (index - 1, index + 1):
-            if 0 <= adjacent < len(lines) and re.fullmatch(r"(?:\d+|[NT])", normalized(lines[adjacent]), re.IGNORECASE):
-                header_indexes.add(adjacent)
+        adjacent = index - 1
+        while adjacent >= 0 and (not normalized(lines[adjacent]) or is_header_marker(lines[adjacent])):
+            header_indexes.add(adjacent)
+            adjacent -= 1
+
+        adjacent = index + 1
+        while adjacent < len(lines) and (not normalized(lines[adjacent]) or is_header_marker(lines[adjacent])):
+            header_indexes.add(adjacent)
+            adjacent += 1
 
     text = "\n".join(
         line.rstrip() for index, line in enumerate(lines) if index not in header_indexes

@@ -40,6 +40,7 @@ class Chapter(BaseModel):
 
 class Schedule(BaseModel):
     name: str
+    text: str = ""
     forms: list[Form] = Field(default_factory=list)
     annexures: list[Annexure] = Field(default_factory=list)
 

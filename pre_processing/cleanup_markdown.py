@@ -37,13 +37,68 @@ def cleanup_regulation(md_path: str | Path, output_md_path: str | Path) -> None:
     output_path.write_text(f"{text}\n", encoding="utf-8")
 
 
+def cleanup_amendment(md_path: str | Path, output_md_path: str | Path) -> None:
+    """Clean an amendment Markdown file and write the result to another file."""
+    input_path = Path(md_path)
+    output_path = Path(output_md_path)
+    lines = input_path.read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n").split("\n")
+
+    def normalized(line: str) -> str:
+        return re.sub(r"\s+", " ", line).strip()
+
+    notification_index = next(
+        (
+            index
+            for index, line in enumerate(lines)
+            if normalized(line).upper() == "NOTIFICATION"
+            and any(
+                re.match(r"^New Delhi,\s+the\s+.+$", normalized(next_line), re.IGNORECASE)
+                for next_line in lines[index + 1 : index + 3]
+            )
+        ),
+        None,
+    )
+    if notification_index is not None:
+        lines = lines[notification_index:]
+
+    gazette_patterns = (
+        re.compile(r"THE GAZETTE OF INDIA\s*:\s*EXTRAORDINARY", re.IGNORECASE),
+        re.compile(r"भारत का रािपत्र\s*:\s*असाधारण"),
+    )
+    header_indexes = {
+        index
+        for index, line in enumerate(lines)
+        if any(pattern.search(normalized(line)) for pattern in gazette_patterns)
+    }
+
+    # Page extraction can split the page number and gazette header over lines.
+    for index in tuple(header_indexes):
+        for adjacent in (index - 1, index + 1):
+            if 0 <= adjacent < len(lines) and re.fullmatch(r"(?:\d+|[NT])", normalized(lines[adjacent]), re.IGNORECASE):
+                header_indexes.add(adjacent)
+
+    text = "\n".join(
+        line.rstrip() for index, line in enumerate(lines) if index not in header_indexes
+    )
+    text = re.sub(r"\n{3,}", "\n\n", text).strip()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(f"{text}\n", encoding="utf-8")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Clean an extracted Markdown file.")
     parser.add_argument("md_path", type=Path, help="Path to the input Markdown file")
     parser.add_argument("output_md_path", type=Path, help="Path for the cleaned Markdown file")
+    parser.add_argument(
+        "--kind",
+        choices=("regulation", "amendment"),
+        default="regulation",
+        help="Document type to clean (default: regulation)",
+    )
     args = parser.parse_args()
 
-    cleanup_regulation(args.md_path, args.output_md_path)
+    cleaner = cleanup_amendment if args.kind == "amendment" else cleanup_regulation
+    cleaner(args.md_path, args.output_md_path)
     print(f"Cleaned Markdown written to: {args.output_md_path}")
 
 

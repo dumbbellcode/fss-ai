@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate Markdown, cleaned Markdown, and JSON for sample regulations."""
+"""Generate Markdown, cleaned Markdown, and JSON for sample regulations and amendments."""
 
 import argparse
 import sys
@@ -8,17 +8,16 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from pre_processing.cleanup_markdown import cleanup_regulation
+from pre_processing.cleanup_markdown import cleanup_amendment, cleanup_regulation
+from pre_processing.amendment_parser import parse_amendment
 from pre_processing.regulation_parser import parse_regulation
 from utils.pdf_to_md import ConversionMethod, convert_pdf
 
 SAMPLE_DIRECTORIES = [
     PROJECT_ROOT / "assets/regulations/01_Licensing_and_Registration_of_Food_Businesses",
-    PROJECT_ROOT / "assets/regulations/02_Food_Products_Standards_and_Food_Additives",
 ]
 
-
-def process_pdf(pdf_path: Path, method: ConversionMethod) -> None:
+def process_regulation_pdf(pdf_path: Path, method: ConversionMethod) -> None:
     markdown_path = convert_pdf(pdf_path, method)
     cleaned_path = pdf_path.with_name(f"{pdf_path.stem}.cleaned.md")
 
@@ -28,13 +27,27 @@ def process_pdf(pdf_path: Path, method: ConversionMethod) -> None:
     print(f"  Markdown: {markdown_path.name}")
     print(f"  Cleaned:  {cleaned_path.name}")
 
-    if markdown_path.name != "Regulation.md":
+    if pdf_path.stem != "Regulation":
         return
 
     json_path = pdf_path.with_name(f"{pdf_path.stem}.cleaned.json")
     result = parse_regulation(cleaned_path)
     json_path.write_text(result.model_dump_json(indent=2) + "\n", encoding="utf-8")
     print(f"  JSON:     {json_path.name}")
+
+
+def process_amendment_pdf(pdf_path: Path, method: ConversionMethod) -> None:
+    markdown_path = convert_pdf(pdf_path, method)
+    cleaned_path = pdf_path.with_name(f"{pdf_path.stem}.cleaned.md")
+    json_path = pdf_path.with_name(f"{pdf_path.stem}.cleaned.json")
+
+    cleanup_amendment(markdown_path, cleaned_path)
+    amendments = parse_amendment(cleaned_path, json_path)
+
+    print(f"Processed: {pdf_path}")
+    print(f"  Markdown: {markdown_path.name}")
+    print(f"  Cleaned:  {cleaned_path.name}")
+    print(f"  JSON:     {json_path.name} ({len(amendments)} amendments)")
 
 
 def main() -> None:
@@ -51,7 +64,9 @@ def main() -> None:
 
     for directory in SAMPLE_DIRECTORIES:
         for pdf_path in sorted(directory.glob("*.pdf")):
-            process_pdf(pdf_path, args.method)
+            process_regulation_pdf(pdf_path, args.method)
+        for pdf_path in sorted((directory / "amendments").glob("*.pdf")):
+            process_amendment_pdf(pdf_path, args.method)
 
 
 if __name__ == "__main__":

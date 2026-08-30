@@ -9,7 +9,7 @@ ConversionMethod = Literal["pymupdf", "markitdown"]
 
 def convert_pdf(pdf_path: str | Path, method: ConversionMethod = "markitdown") -> Path:
     pdf_path = Path(pdf_path)
-    output_path = pdf_path.with_suffix(".md")
+    output_path = pdf_path.with_name(f"{pdf_path.stem}.converted.md")
 
     if method == "markitdown":
         from markitdown import MarkItDown

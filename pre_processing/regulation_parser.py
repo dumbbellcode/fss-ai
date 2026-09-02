@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Parse extracted FSSAI regulation Markdown into structured JSON."""
 
+from __future__ import annotations
+
 import argparse
 import json
 import re
@@ -13,6 +15,10 @@ from pydantic import BaseModel, Field
 class Subsection(BaseModel):
     no: str
     text: str = ""
+
+    def get_chunk_header(self, chapter: Chapter, section: Section) -> str:
+        """Build the header prefixing this subsection's text in a RAG chunk."""
+        return f"Chapter: {chapter.get_chunk_title()}\nSection: {section.text}"
 
 
 class Section(BaseModel):
@@ -37,6 +43,10 @@ class Chapter(BaseModel):
     sections: list[Section] = Field(default_factory=list)
     forms: list[Form] = Field(default_factory=list)
 
+    def get_chunk_title(self) -> str:
+        """Title to display after the ``Chapter:`` label, falling back to the number."""
+        return self.title or str(self.no)
+
 
 class Schedule(BaseModel):
     name: str
@@ -46,6 +56,7 @@ class Schedule(BaseModel):
 
 
 class Regulation(BaseModel):
+    title: str
     chapters: list[Chapter] = Field(default_factory=list)
     schedules: list[Schedule] = Field(default_factory=list)
 
@@ -62,6 +73,15 @@ FORM_RE = re.compile(
     rf"^FORM\s+[{QUOTE_CHARS}]?([A-Z0-9]+(?:-[A-Z0-9]+)*)[{QUOTE_CHARS}]?$",
     re.IGNORECASE,
 )
+_STAGE_DIRS = {"original", "converted", "cleaned", "post_amendment", "amendments"}
+
+
+def _regulation_title_from_path(path: Path) -> str:
+    """Get the regulation directory name from a staged Markdown path."""
+    for parent in path.parents:
+        if parent.name not in _STAGE_DIRS:
+            return parent.name
+    return path.parent.name
 
 
 def detect_item(line: str) -> tuple[ItemType, str] | None:
@@ -115,8 +135,9 @@ def _is_incremental_subsection(number: str, section: Section | None) -> bool:
 
 def parse_regulation(md_path: str | Path) -> Regulation:
     """Parse a Markdown regulation into its structured representation."""
-    lines = Path(md_path).read_text(encoding="utf-8").splitlines()
-    regulation = Regulation()
+    path = Path(md_path)
+    lines = path.read_text(encoding="utf-8").splitlines()
+    regulation = Regulation(title=_regulation_title_from_path(path))
     chapter: Chapter | None = None
     section: Section | None = None
     schedule: Schedule | None = None

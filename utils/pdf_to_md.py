@@ -7,9 +7,13 @@ from typing import Literal
 
 ConversionMethod = Literal["pymupdf", "markitdown"]
 
-def convert_pdf(pdf_path: str | Path, method: ConversionMethod = "markitdown") -> Path:
+def convert_pdf(
+    pdf_path: str | Path,
+    method: ConversionMethod = "markitdown",
+    output_path: str | Path | None = None,
+) -> Path:
     pdf_path = Path(pdf_path)
-    output_path = pdf_path.with_name(f"{pdf_path.stem}.converted.md")
+    output_path = Path(output_path) if output_path else pdf_path.with_name(f"{pdf_path.stem}.converted.md")
 
     if method == "markitdown":
         from markitdown import MarkItDown
@@ -21,6 +25,7 @@ def convert_pdf(pdf_path: str | Path, method: ConversionMethod = "markitdown") -
         with pymupdf.open(pdf_path) as document:
             text = "\n".join(page.get_text() for page in document)
 
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(f"{text.rstrip()}\n", encoding="utf-8")
     return output_path
 

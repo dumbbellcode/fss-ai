@@ -1,0 +1,1 @@
+"""Ingestion pipeline: chunk regulation JSON, embed, and persist to Chroma."""

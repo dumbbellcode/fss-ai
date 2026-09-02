@@ -14,6 +14,7 @@ The pipeline turns FSSAI regulation PDFs into structured JSON that can be fed in
 4. **Parse** — regulation Markdown → structured JSON (chapters/sections/sub-sections/schedules/forms) (`*.cleaned.json`).
 5. **Amendments** — use an LLM to extract amendment changes (`date` + `changes`) from amendment notifications.
 6. **Apply** — use an LLM to apply amendment changes onto the parsed regulation JSON, producing `regulation.final.json`.
+7. **Ingest** — chunk the final regulation JSON, embed the chunks, and persist them to a Chroma vector store.
 
 ## Project layout
 
@@ -25,6 +26,11 @@ pre_processing/
   regulation_parser.py       # regulation markdown -> structured JSON + pydantic DTOs
   amendment_parser.py        # amendment markdown -> amendment JSON (LLM)
   apply_amendment.py         # apply amendment JSON onto regulation JSON (LLM)
+ingestion/
+  config.py                # chunking / embedding / chroma settings
+  chunks_creator.py        # regulation JSON -> text chunks with metadata
+  create_embeddings.py     # chunks -> embeddings (OpenRouter)
+  persist_embeddings.py    # chunks + embeddings -> Chroma
 utils/
   pdf_to_md.py               # PDF -> markdown conversion
   cleanup.py                 # remove generated artifacts
@@ -51,8 +57,51 @@ uv run python utils/generate_sample.py --force            # ignore incremental c
 
 The pipeline is incremental: each stage is skipped when its output already exists
 and the source is unchanged, tracked in `<directory>/manifest.json`. Stages are
-`convert` (PDF → `.converted.md`), `clean` (`.converted.md` → `.cleaned.md`), and
-`parse` (`.cleaned.md` → `.cleaned.json`).
+`convert` (PDF → `.converted.md`), `clean` (`.converted.md` → `.cleaned.md`),
+`parse` (`.cleaned.md` → `.cleaned.json`), and `post_amendment` (`.cleaned.json`
+→ `post_amendment/*.final.json`).
+
+### Ingestion
+
+```bash
+# chunk the final regulation JSON and write embeddings to a Chroma store
+uv run python -m ingestion.persist_embeddings \
+    assets/regulations/01_Licensing_and_Registration_of_Food_Businesses/post_amendment/Regulation.final.json
+
+# or run the steps individually
+uv run python -m ingestion.chunks_creator <regulation.json> chunks.json
+uv run python -m ingestion.create_embeddings chunks.json embeddings.json
+```
+
+Each chapter section/subsection becomes a chunk of the form `Chapter: <title>\nSection:
+<section>\n\n<subsection>`. Subsections (and schedule/annexure/form bodies) longer
+than the chunk size are split with a LangChain `RecursiveCharacterTextSplitter` sized
+by tokens (`cl100k_base`). Every chunk carries metadata: `regulation` (the
+`Regulation.title` value), `chapter`, `section`, `subsection`, plus `part` when a subsection was
+split. Embeddings default to `openai/text-embedding-3-large` on OpenRouter; the Chroma
+collection defaults to `fssai_regulations` under `embeddings/`. All values live in
+`ingestion/config.py`.
+
+### Benchmarking retrieval accuracy
+
+Chunking and embedding are parameterized, so you can ingest the same regulation into
+separate Chroma collections per configuration and compare accuracy:
+
+```python
+from ingestion.persist_embeddings import ingest_regulation
+
+regulation = "assets/regulations/01_Licensing_and_Registration_of_Food_Businesses/post_amendment/Regulation.final.json"
+for model in ["openai/text-embedding-3-small", "openai/text-embedding-3-large"]:
+    for chunk_size in [200, 500, 1000]:
+        ingest_regulation(
+            regulation,
+            collection_name=f"fssai_{model.split('/')[-1]}_{chunk_size}",
+            model=model,
+            chunk_size_tokens=chunk_size,
+        )
+```
+
+The CLI exposes the same knobs via `--model`, `--chunk-size`, `--chunk-overlap`.
 
 Integration tests that call the real LLM (accuracy checks) run with:
 
@@ -62,11 +111,11 @@ uv run pytest -m integration -s
 
 ## Notes
 
-- Generated assets under `assets/` and the `.env` file are gitignored.
+- Generated assets under `assets/`, the `.env` file, and the Chroma store under `embeddings/` are gitignored.
 - The LLM steps use `openai/gpt-4o-mini` (apply) and `deepseek/deepseek-v4-flash` (extract) on OpenRouter by default.
 
 ## Roadmap
 
-- [ ] Index parsed regulations for retrieval
+- [x] Index parsed regulations for retrieval
 - [ ] Add a query/answer interface
 - [ ] Expand coverage to all FSSAI regulations

@@ -4,8 +4,10 @@
 import json
 import os
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import Sequence
 
 from dotenv import load_dotenv
 from langchain_core.messages import SystemMessage
@@ -41,7 +43,7 @@ Return only the complete text of the new section.
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_MODEL = "openai/gpt-4o-mini"
-MAX_WORKERS = 5
+MAX_WORKERS = 7
 
 load_dotenv()
 
@@ -94,31 +96,83 @@ def _find_target(regulation: Regulation, change: AmendmentItem):
     return None
 
 
+# Tokens some models emit instead of real content on generation failure.
+_GARBAGE_TOKENS = ["<｜end▁of▁sentence｜>", "<|end|>", "<|eot_id|>", "</s>"]
+
+
 def _llm_apply(llm, current_text: str, amendment_text: str, retries: int = 5) -> str:
     template = APPLY_AMENDMENT_PROMPT if current_text else INSERT_AMENDMENT_PROMPT
     prompt = template.format(current_text=current_text, amendment_text=amendment_text)
-    text = ""
+    # An update must return the whole section, so require a comparable length.
+    min_len = max(10, int(len(current_text) * 0.3)) if current_text else 10
     for _ in range(retries):
         result = llm.invoke([SystemMessage(content=prompt)])
-        text = result.content.strip()
-        if len(text) >= 10 and not text.startswith("The current section text is not provided"):
+        text = (result.content or "").strip()
+        for token in _GARBAGE_TOKENS:
+            text = text.replace(token, "")
+        text = text.strip()
+        if len(text) >= min_len and not text.startswith("The current section text is not provided"):
             return text
-    return text
+    # All attempts failed: preserve the existing text rather than losing data.
+    return current_text
 
 
 def _process_group(llm, group: list) -> None:
     """Apply a group of changes targeting the same object, sequentially."""
     for change, target in group:
+        started = time.perf_counter()
         if target[0] == "update":
             item = target[1]
             item.text = _llm_apply(llm, item.text or "", change.amendment_text)
             label = getattr(item, "no", None) or getattr(item, "name", None) or "schedule"
-            print(f"Updated: {label}", flush=True)
+            print(f"Updated: {label} ({time.perf_counter() - started:.1f}s)", flush=True)
         else:
             _, section, subregulation_no = target
             new_text = _llm_apply(llm, "", change.amendment_text)
+            elapsed = time.perf_counter() - started
+            if not new_text:
+                print(f"Skipped insert (empty LLM output): {subregulation_no} ({elapsed:.1f}s)", flush=True)
+                continue
             section.sub_sections.append(Subsection(no=subregulation_no, text=new_text))
-            print(f"Inserted sub-regulation: {subregulation_no}", flush=True)
+            print(f"Inserted sub-regulation: {subregulation_no} ({elapsed:.1f}s)", flush=True)
+
+
+def _build_llm(model: str) -> ChatOpenAI:
+    return ChatOpenAI(
+        model=model,
+        base_url=OPENROUTER_BASE_URL,
+        api_key=os.environ["OPENROUTER_API_KEY"],
+        temperature=0,
+    )
+
+
+def apply_amendment_to_regulation(
+    regulation: Regulation,
+    amendment: AmendmentList,
+    llm=None,
+    model: str = DEFAULT_MODEL,
+) -> Regulation:
+    """Apply every change from an amendment onto an in-memory regulation."""
+    llm = llm or _build_llm(model)
+
+    groups: dict[int, list] = {}
+    for change in amendment.changes:
+        target = _find_target(regulation, change)
+        if target is None:
+            print(f"Skipped (no matching target): {change.model_dump()}", flush=True)
+            continue
+        groups.setdefault(id(target[1]), []).append((change, target))
+
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = [executor.submit(_process_group, llm, group) for group in groups.values()]
+        for future in futures:
+            future.result()
+    return regulation
+
+
+def _write_regulation(regulation: Regulation, output_path: Path) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(regulation.model_dump(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
 def apply_amendment(
@@ -136,32 +190,46 @@ def apply_amendment(
     regulation = Regulation.model_validate_json(Path(regulation_json_path).read_text(encoding="utf-8"))
     amendment = AmendmentList.model_validate_json(Path(amendment_json_path).read_text(encoding="utf-8"))
 
-    llm = ChatOpenAI(
-        model=model,
-        base_url=OPENROUTER_BASE_URL,
-        api_key=os.environ["OPENROUTER_API_KEY"],
-        temperature=0,
-    )
-
-    groups: dict[int, list] = {}
-    for change in amendment.changes:
-        target = _find_target(regulation, change)
-        if target is None:
-            print(f"Skipped (no matching target): {change.model_dump()}", flush=True)
-            continue
-        groups.setdefault(id(target[1]), []).append((change, target))
-
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        futures = [executor.submit(_process_group, llm, group) for group in groups.values()]
-        for future in futures:
-            future.result()
+    regulation = apply_amendment_to_regulation(regulation, amendment, model=model)
 
     output_path = (
         Path(output_json_path)
         if output_json_path
         else Path(regulation_json_path).parent / f"{Path(regulation_json_path).stem.rsplit('.', 1)[0]}.final.json"
     )
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(regulation.model_dump(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    _write_regulation(regulation, output_path)
     print(f"Final regulation written to: {output_path}")
+    return regulation
+
+
+def _amendment_date(path: Path) -> str:
+    return AmendmentList.model_validate_json(path.read_text(encoding="utf-8")).date
+
+
+def apply_amendments(
+    regulation_json_path: str | Path,
+    amendment_json_paths: Sequence[str | Path],
+    output_json_path: str | Path | None = None,
+    model: str = DEFAULT_MODEL,
+) -> Regulation:
+    """Apply a sequence of amendments onto a regulation, in date order.
+
+    Amendments are applied cumulatively, earliest date first. When
+    ``output_json_path`` is given the final regulation is written there; the
+    resulting ``Regulation`` is always returned.
+    """
+    regulation = Regulation.model_validate_json(Path(regulation_json_path).read_text(encoding="utf-8"))
+    ordered = sorted((Path(path) for path in amendment_json_paths), key=_amendment_date)
+    llm = _build_llm(model)
+
+    for amendment_path in ordered:
+        amendment = AmendmentList.model_validate_json(amendment_path.read_text(encoding="utf-8"))
+        started = time.perf_counter()
+        print(f"Applying amendment {amendment.date}: {amendment_path}", flush=True)
+        regulation = apply_amendment_to_regulation(regulation, amendment, llm=llm)
+        print(f"Amendment {amendment.date} applied in {time.perf_counter() - started:.1f}s", flush=True)
+
+    if output_json_path:
+        _write_regulation(regulation, Path(output_json_path))
+        print(f"Final regulation written to: {output_json_path}")
     return regulation

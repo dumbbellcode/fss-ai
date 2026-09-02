@@ -43,8 +43,21 @@ tests/                       # pytest unit tests
 ```bash
 uv sync
 cp .env.example .env        # add your OPENROUTER_API_KEY
-uv run pytest               # run unit tests
-uv run python utils/generate_sample.py   # run pipeline on sample directories
+uv run pytest               # run unit tests (excludes integration)
+uv run python utils/generate_sample.py                    # run all stages
+uv run python utils/generate_sample.py --stages clean,parse   # run a subset
+uv run python utils/generate_sample.py --force            # ignore incremental cache
+```
+
+The pipeline is incremental: each stage is skipped when its output already exists
+and the source is unchanged, tracked in `<directory>/manifest.json`. Stages are
+`convert` (PDF → `.converted.md`), `clean` (`.converted.md` → `.cleaned.md`), and
+`parse` (`.cleaned.md` → `.cleaned.json`).
+
+Integration tests that call the real LLM (accuracy checks) run with:
+
+```bash
+uv run pytest -m integration -s
 ```
 
 ## Notes

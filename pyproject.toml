@@ -16,8 +16,12 @@ dependencies = [
 package = false
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests/unit", "tests/integration"]
 pythonpath = ["."]
+addopts = "-m 'not integration'"
+markers = [
+    "integration: tests that call the real LLM (run with -m integration)",
+]
 
 [dependency-groups]
 dev = [

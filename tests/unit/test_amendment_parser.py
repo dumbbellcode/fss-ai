@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 from pre_processing.amendment_parser import AmendmentItem, AmendmentList, parse_amendment
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 FIXTURES_DIR = PROJECT_ROOT / "tests" / "fixtures"
 SAMPLE_MD = FIXTURES_DIR / "01_273797.cleaned.md"
 

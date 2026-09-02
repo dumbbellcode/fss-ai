@@ -6,10 +6,10 @@ import pytest
 
 from pre_processing import apply_amendment as module
 from pre_processing.amendment_parser import AmendmentItem
-from pre_processing.apply_amendment import apply_amendment
+from pre_processing.apply_amendment import apply_amendment, apply_amendments
 from pre_processing.regulation_parser import Regulation
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 FIXTURES_DIR = PROJECT_ROOT / "tests" / "fixtures"
 REGULATION_JSON = FIXTURES_DIR / "regulation.json"
 AMENDMENTS_DIR = FIXTURES_DIR
@@ -110,3 +110,57 @@ def test_default_output_path_naming(tmp_path):
     ):
         apply_amendment(regulation_copy, amendment_json)
     assert (tmp_path / "Regulation.final.json").exists()
+
+
+def test_apply_amendments_writes_output(tmp_path):
+    output = tmp_path / "Regulation.final.json"
+    amendments = [
+        AMENDMENTS_DIR / "03_Quality_Vegetable_Oil.json",
+        AMENDMENTS_DIR / "02_1_Notification.json",
+        AMENDMENTS_DIR / "01_273797.json",
+    ]
+    with (
+        patch("pre_processing.apply_amendment.ChatOpenAI"),
+        patch("pre_processing.apply_amendment._llm_apply", return_value="UPDATED-TEXT"),
+    ):
+        result = apply_amendments(REGULATION_JSON, amendments, output)
+
+    section_21 = next(s for ch in result.chapters for s in ch.sections if s.no == "2.1")
+    assert any(ss.no == "2.1.17" for ss in section_21.sub_sections)
+    annexure_3 = next(
+        a for s in result.schedules if s.name == "Schedule 2" for a in s.annexures if a.name == "Annexure-3"
+    )
+    assert annexure_3.text == "UPDATED-TEXT"
+    assert output.exists()
+
+
+def test_apply_amendments_applies_in_date_order(tmp_path):
+    amendment_a = tmp_path / "A.json"
+    amendment_b = tmp_path / "B.json"
+    amendment_a.write_text(
+        json.dumps(
+            {"date": "2020-01-01", "changes": [{"regulation": "1.2", "subregulation": "1.2.1", "amendment_text": "first"}]}
+        ),
+        encoding="utf-8",
+    )
+    amendment_b.write_text(
+        json.dumps(
+            {"date": "2025-01-01", "changes": [{"regulation": "1.2", "subregulation": "1.2.1", "amendment_text": "second"}]}
+        ),
+        encoding="utf-8",
+    )
+
+    applied = []
+    original = module.apply_amendment_to_regulation
+    try:
+        def recording(regulation, amendment, llm=None, model=module.DEFAULT_MODEL):
+            applied.append(amendment.date)
+            return regulation
+
+        module.apply_amendment_to_regulation = recording
+        with patch("pre_processing.apply_amendment.ChatOpenAI"):
+            apply_amendments(REGULATION_JSON, [amendment_b, amendment_a])
+    finally:
+        module.apply_amendment_to_regulation = original
+
+    assert applied == ["2020-01-01", "2025-01-01"]

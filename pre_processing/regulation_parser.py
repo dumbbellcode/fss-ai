@@ -149,7 +149,7 @@ def parse_regulation(md_path: str | Path) -> Regulation:
             return
         if isinstance(item, Chapter):
             item.title = f"{item.title}\n{value}".strip()
-        elif isinstance(item, (Section, Subsection, Form, Annexure)):
+        elif isinstance(item, (Section, Subsection, Form, Annexure, Schedule)):
             item.text = f"{item.text}\n{value}".strip()
 
     def finish_item() -> None:

@@ -14,7 +14,7 @@ from langchain_core.messages import SystemMessage
 from langchain_openai import ChatOpenAI
 
 from pre_processing.amendment_parser import AmendmentItem, AmendmentList
-from pre_processing.regulation_parser import Regulation, Subsection
+from pre_processing.regulation_parser import Regulation, Schedule, Subsection
 
 APPLY_AMENDMENT_PROMPT = """
 You are given the current text of a section of an Indian food safety regulation, along with an amendment
@@ -100,6 +100,59 @@ def _find_target(regulation: Regulation, change: AmendmentItem):
 _GARBAGE_TOKENS = ["<｜end▁of▁sentence｜>", "<|end|>", "<|eot_id|>", "</s>"]
 
 
+def _quoted_amendment_text(amendment_text: str) -> str | None:
+    match = re.search(r'[“"](.*?)[”"]', amendment_text, re.DOTALL)
+    return match.group(1).strip() if match else None
+
+
+def _apply_schedule_amendment(current_text: str, amendment_text: str) -> str | None:
+    """Apply common schedule paragraph/clause amendments without rewriting a schedule.
+
+    Schedules can be much larger than an LLM's practical output budget. Gazette
+    amendments identify the local paragraph or clause and provide its replacement
+    text, so patch that local region while preserving the rest of the schedule.
+    Returns ``None`` when the amendment shape cannot be located safely.
+    """
+    replacement = _quoted_amendment_text(amendment_text)
+    if not replacement:
+        return None
+
+    paragraph = re.search(r"\bfor paragraph\s+([0-9]+(?:\.[0-9]+)+)\b", amendment_text, re.IGNORECASE)
+    if paragraph:
+        number = re.escape(paragraph.group(1))
+        pattern = re.compile(rf"^\s*{number}\b.*?(?=^\s*\d+(?:\.\d+)+\b|\Z)", re.MULTILINE | re.DOTALL)
+        updated, count = pattern.subn(replacement + "\n", current_text, count=1)
+        return updated if count else None
+
+    clause = re.search(r"\bin clause\s*\((\d+)\)", amendment_text, re.IGNORECASE)
+    relating_to = re.search(r"relating to\s+([^,]+),\s*in clause", amendment_text, re.IGNORECASE)
+    if not clause or not relating_to:
+        return None
+
+    heading = re.search(
+        rf"^\s*\d+\.\s+{re.escape(relating_to.group(1).strip())}\s*$",
+        current_text,
+        re.IGNORECASE | re.MULTILINE,
+    )
+    if not heading:
+        return None
+    next_heading = re.search(r"^\s*\d+\.\s+\S", current_text[heading.end() :], re.MULTILINE)
+    block_end = heading.end() + next_heading.start() if next_heading else len(current_text)
+    block = current_text[heading.start() : block_end]
+
+    clause_pattern = re.compile(
+        rf"^\s*\({re.escape(clause.group(1))}\).*?(?=^\s*\(\d+\)|\Z)",
+        re.MULTILINE | re.DOTALL,
+    )
+    clause_match = clause_pattern.search(block)
+    if not clause_match:
+        return None
+    original_clause = clause_match.group(0).rstrip()
+    updated_clause = original_clause + " " + replacement
+    updated_block = block[: clause_match.start()] + updated_clause + block[clause_match.end() :]
+    return current_text[: heading.start()] + updated_block + current_text[block_end:]
+
+
 def _llm_apply(llm, current_text: str, amendment_text: str, retries: int = 5) -> str:
     template = APPLY_AMENDMENT_PROMPT if current_text else INSERT_AMENDMENT_PROMPT
     prompt = template.format(current_text=current_text, amendment_text=amendment_text)
@@ -123,7 +176,11 @@ def _process_group(llm, group: list) -> None:
         started = time.perf_counter()
         if target[0] == "update":
             item = target[1]
-            item.text = _llm_apply(llm, item.text or "", change.amendment_text)
+            if isinstance(item, Schedule):
+                patched = _apply_schedule_amendment(item.text or "", change.amendment_text)
+                item.text = patched if patched is not None else _llm_apply(llm, item.text or "", change.amendment_text)
+            else:
+                item.text = _llm_apply(llm, item.text or "", change.amendment_text)
             label = getattr(item, "no", None) or getattr(item, "name", None) or "schedule"
             print(f"Updated: {label} ({time.perf_counter() - started:.1f}s)", flush=True)
         else:

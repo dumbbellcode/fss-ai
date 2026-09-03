@@ -50,3 +50,15 @@ def test_parse_regulation_populates_title_from_regulation_directory(tmp_path):
     regulation = parse_regulation(path)
 
     assert regulation.title == "My Regulation"
+
+
+def test_parse_regulation_preserves_schedule_text(tmp_path):
+    regulation_dir = tmp_path / "My Regulation" / "cleaned"
+    regulation_dir.mkdir(parents=True)
+    path = regulation_dir / "Regulation.md"
+    path.write_text("Schedule 4\nGeneral hygienic requirements.\n", encoding="utf-8")
+
+    regulation = parse_regulation(path)
+
+    assert regulation.schedules[0].name == "Schedule 4"
+    assert regulation.schedules[0].text == "General hygienic requirements."

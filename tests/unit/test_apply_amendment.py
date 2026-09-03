@@ -58,6 +58,45 @@ def test_find_target_no_match():
     assert module._find_target(regulation, change) is None
 
 
+def test_apply_schedule_paragraph_amendment_preserves_surrounding_text():
+    current = """1.1 First paragraph
+5.2.4 Previous paragraph
+5.2.5 Old storage requirement.
+5.2.6 Following paragraph
+9.1 Another section"""
+    amendment = (
+        "in Schedule 4, for paragraph 5.2.5, the following shall be substituted, namely:- "
+        '“5.2.5 New storage requirement.”'
+    )
+
+    updated = module._apply_schedule_amendment(current, amendment)
+
+    assert updated == """1.1 First paragraph
+5.2.4 Previous paragraph
+5.2.5 New storage requirement.
+5.2.6 Following paragraph
+9.1 Another section"""
+
+
+def test_apply_schedule_clause_insertion_preserves_surrounding_text():
+    current = """6. Other heading
+(1) First clause.
+7. Fried Foods
+(1) Good oil.
+(4) Re-heating and reuse of oil should be avoided.
+8. Next heading"""
+    amendment = (
+        "in Schedule 4, in Part-V, in paragraph VI, in sub-paragraph 7 relating to Fried Foods, "
+        'in clause (4), the following word and figure shall be inserted, namely— “However, oil shall not be reused.”'
+    )
+
+    updated = module._apply_schedule_amendment(current, amendment)
+
+    assert "(4) Re-heating and reuse of oil should be avoided. However, oil shall not be reused." in updated
+    assert "6. Other heading" in updated
+    assert "8. Next heading" in updated
+
+
 def test_apply_schedule_amendment_writes_json(tmp_path):
     amendment_json = AMENDMENTS_DIR / "01_273797.json"
     output = tmp_path / "Regulation.final.json"

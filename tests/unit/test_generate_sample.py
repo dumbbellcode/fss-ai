@@ -22,7 +22,7 @@ def test_parse_stages_rejects_unknown():
 
 def test_build_stages_order():
     stages = build_stages("markitdown")
-    assert [s.name for s in stages] == ["convert", "clean", "parse", "post_amendment"]
+    assert [s.name for s in stages] == ["convert", "clean", "parse", "post_amendment", "ingestion"]
 
 
 def test_build_stages_kind_processors():
@@ -39,6 +39,19 @@ def test_post_amendment_stage_config():
     assert stage.in_ext == ".json"
     assert stage.out_dir == "post_amendment"
     assert stage.out_ext == ".final.json"
+    assert set(stage.process) == {"regulation"}
+    assert stage.only("regulation", "Regulation") is True
+    assert stage.only("regulation", "Compendium") is False
+    assert stage.only("amendment", "anything") is False
+    assert stage.dependencies is not None
+
+
+def test_ingestion_stage_config():
+    stage = next(s for s in build_stages("markitdown") if s.name == "ingestion")
+    assert stage.in_dir == "post_amendment"
+    assert stage.in_ext == ".final.json"
+    assert stage.out_dir == "ingestion"
+    assert stage.out_ext == ".ingested.json"
     assert set(stage.process) == {"regulation"}
     assert stage.only("regulation", "Regulation") is True
     assert stage.only("regulation", "Compendium") is False

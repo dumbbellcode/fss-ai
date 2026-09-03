@@ -11,6 +11,8 @@ SPLIT_SEPARATORS = ["\n\n", "\n", ". ", " "]
 # ---- Embeddings -----------------------------------------------------------
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 EMBEDDING_MODEL = "openai/text-embedding-3-large"
+# Keep each embeddings API request below provider prompt-token limits.
+EMBEDDING_BATCH_SIZE = 32
 
 # ---- Chroma store ---------------------------------------------------------
 COLLECTION_NAME = "fssai_regulations"

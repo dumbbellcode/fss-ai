@@ -18,7 +18,7 @@ DEFAULT_PERSIST_DIR = PERSIST_DIR
 
 
 def _chunk_id(chunk: Chunk) -> str:
-    key = chunk.text + json.dumps(chunk.metadata.model_dump(), sort_keys=True, default=str)
+    key = chunk.text + json.dumps(chunk.metadata.model_dump(mode="json", exclude_none=True), sort_keys=True)
     return hashlib.sha256(key.encode("utf-8")).hexdigest()
 
 
@@ -35,10 +35,16 @@ def persist_embeddings(
     """
     client = chromadb.PersistentClient(path=str(persist_dir))
     collection = client.get_or_create_collection(collection_name)
-    collection.upsert(
+    if not chunks:
+        return collection.count()
+
+    # Replacing this regulation's records removes stale chunks after changing
+    # chunk size, overlap, or the source regulation while preserving others.
+    collection.delete(where={"regulation": chunks[0].metadata.regulation})
+    collection.add(
         ids=[_chunk_id(chunk) for chunk in chunks],
         documents=[chunk.text for chunk in chunks],
-        metadatas=[chunk.metadata.model_dump() for chunk in chunks],
+        metadatas=[chunk.metadata.model_dump(mode="json", exclude_none=True) for chunk in chunks],
         embeddings=[list(vector) for vector in embeddings],
     )
     return collection.count()

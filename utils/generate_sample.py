@@ -7,6 +7,7 @@ the source file is unchanged (tracked in ``<directory>/manifest.json``).
 """
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -18,13 +19,15 @@ from pre_processing.apply_amendment import apply_amendments
 from pre_processing.cleanup_markdown import cleanup_amendment, cleanup_regulation
 from pre_processing.pipeline import Item, Manifest, Stage, run_pipeline
 from pre_processing.regulation_parser import parse_regulation
+from ingestion.config import CHUNK_OVERLAP_TOKENS, CHUNK_SIZE_TOKENS, COLLECTION_NAME, EMBEDDING_MODEL
+from ingestion.persist_embeddings import ingest_regulation
 from utils.pdf_to_md import ConversionMethod, convert_pdf
 
 SAMPLE_DIRECTORIES = [
     PROJECT_ROOT / "assets/regulations/01_Licensing_and_Registration_of_Food_Businesses",
 ]
 
-ALL_STAGE_NAMES = ("convert", "clean", "parse", "post_amendment")
+ALL_STAGE_NAMES = ("convert", "clean", "parse", "post_amendment", "ingestion")
 
 
 def build_stages(method: ConversionMethod) -> list[Stage]:
@@ -39,6 +42,33 @@ def build_stages(method: ConversionMethod) -> list[Stage]:
     def post_amendment_stage(src: Path, dst: Path) -> None:
         amendments = sorted((src.parent / "amendments").glob("*.json"))
         apply_amendments(src, amendments, output_json_path=dst)
+
+    def ingestion_stage(src: Path, dst: Path) -> None:
+        chroma_dir = dst.parent / "chroma"
+        count = ingest_regulation(
+            src,
+            collection_name=COLLECTION_NAME,
+            persist_dir=chroma_dir,
+            model=EMBEDDING_MODEL,
+            chunk_size_tokens=CHUNK_SIZE_TOKENS,
+            chunk_overlap_tokens=CHUNK_OVERLAP_TOKENS,
+        )
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_text(
+            json.dumps(
+                {
+                    "collection": COLLECTION_NAME,
+                    "documents": count,
+                    "embedding_model": EMBEDDING_MODEL,
+                    "chunk_size_tokens": CHUNK_SIZE_TOKENS,
+                    "chunk_overlap_tokens": CHUNK_OVERLAP_TOKENS,
+                    "chroma_dir": str(chroma_dir),
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
 
     return [
         Stage("convert", "original", ".pdf", "converted", ".md", convert),
@@ -73,6 +103,19 @@ def build_stages(method: ConversionMethod) -> list[Stage]:
             dependencies=lambda item: [
                 item.root / "cleaned" / f"{item.base_stem}.json",
                 *sorted((item.root / "cleaned" / "amendments").glob("*.json")),
+            ],
+        ),
+        Stage(
+            "ingestion",
+            "post_amendment",
+            ".final.json",
+            "ingestion",
+            ".ingested.json",
+            {"regulation": ingestion_stage},
+            only=lambda kind, stem: kind == "regulation" and stem == "Regulation",
+            dependencies=lambda item: [
+                item.root / "post_amendment" / f"{item.base_stem}.final.json",
+                *sorted((PROJECT_ROOT / "ingestion").glob("*.py")),
             ],
         ),
     ]

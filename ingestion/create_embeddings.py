@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 from langchain_openai import OpenAIEmbeddings
 
 from ingestion.chunks_creator import Chunk
-from ingestion.config import EMBEDDING_MODEL, OPENROUTER_BASE_URL
+from ingestion.config import EMBEDDING_BATCH_SIZE, EMBEDDING_MODEL, OPENROUTER_BASE_URL
 
 DEFAULT_EMBEDDING_MODEL = EMBEDDING_MODEL
 
@@ -22,6 +22,7 @@ def build_embeddings(model: str = DEFAULT_EMBEDDING_MODEL) -> OpenAIEmbeddings:
         model=model,
         base_url=OPENROUTER_BASE_URL,
         api_key=os.environ["OPENROUTER_API_KEY"],
+        chunk_size=EMBEDDING_BATCH_SIZE,
         check_embedding_ctx_length=False,
     )
 

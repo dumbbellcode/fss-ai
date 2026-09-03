@@ -12,7 +12,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_TARGET = PROJECT_ROOT / "assets"
 
-GENERATED_DIRS = {"converted", "cleaned", "post_amendment"}
+GENERATED_DIRS = {"converted", "cleaned", "post_amendment", "ingestion"}
 GENERATED_FILES = {"manifest.json"}
 
 

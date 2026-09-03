@@ -58,8 +58,8 @@ uv run python utils/generate_sample.py --force            # ignore incremental c
 The pipeline is incremental: each stage is skipped when its output already exists
 and the source is unchanged, tracked in `<directory>/manifest.json`. Stages are
 `convert` (PDF → `.converted.md`), `clean` (`.converted.md` → `.cleaned.md`),
-`parse` (`.cleaned.md` → `.cleaned.json`), and `post_amendment` (`.cleaned.json`
-→ `post_amendment/*.final.json`).
+`parse` (`.cleaned.md` → `.cleaned.json`), `post_amendment` (`.cleaned.json`
+→ `post_amendment/*.final.json`), and `ingestion` (final JSON → Chroma).
 
 ### Ingestion
 
@@ -102,6 +102,20 @@ for model in ["openai/text-embedding-3-small", "openai/text-embedding-3-large"]:
 ```
 
 The CLI exposes the same knobs via `--model`, `--chunk-size`, `--chunk-overlap`.
+
+### Basic retrieval
+
+Retrieve the most similar chunks for one question from the persisted collection:
+
+```bash
+uv run python -m retrieval.retrieve \
+  "What are the requirements for registering a petty food business?" \
+  --persist-dir assets/regulations/01_Licensing_and_Registration_of_Food_Businesses/ingestion/chroma \
+  --top-k 5
+```
+
+The Python API returns `RetrievedChunk` objects containing `text`, `metadata`,
+and Chroma's `distance` score. Lower distance means greater similarity.
 
 Integration tests that call the real LLM (accuracy checks) run with:
 

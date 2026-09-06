@@ -8,5 +8,5 @@ assets/
 .env
 
 # Chroma vector store
+db/
 embeddings/
-

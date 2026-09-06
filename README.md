@@ -79,7 +79,7 @@ than the chunk size are split with a LangChain `RecursiveCharacterTextSplitter` 
 by tokens (`cl100k_base`). Every chunk carries metadata: `regulation` (the
 `Regulation.title` value), `chapter`, `section`, `subsection`, plus `part` when a subsection was
 split. Embeddings default to `openai/text-embedding-3-large` on OpenRouter; the Chroma
-collection defaults to `fssai_regulations` under `embeddings/`. All values live in
+collection defaults to `fssai_regulations` under `db/`. All values live in
 `ingestion/config.py`.
 
 ### Benchmarking retrieval accuracy
@@ -110,7 +110,7 @@ Retrieve the most similar chunks for one question from the persisted collection:
 ```bash
 uv run python -m retrieval.retrieve \
   "What are the requirements for registering a petty food business?" \
-  --persist-dir assets/regulations/01_Licensing_and_Registration_of_Food_Businesses/ingestion/chroma \
+  --persist-dir db \
   --top-k 5
 ```
 
@@ -125,7 +125,7 @@ uv run pytest -m integration -s
 
 ## Notes
 
-- Generated assets under `assets/`, the `.env` file, and the Chroma store under `embeddings/` are gitignored.
+- Generated assets under `assets/`, the `.env` file, and the Chroma store under `db/` are gitignored.
 - The LLM steps use `openai/gpt-4o-mini` (apply) and `deepseek/deepseek-v4-flash` (extract) on OpenRouter by default.
 
 ## Roadmap

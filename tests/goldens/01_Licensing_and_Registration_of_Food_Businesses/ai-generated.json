@@ -1,0 +1,155 @@
+[
+  {
+    "question": "What does a petty food business operator need to submit to obtain registration?",
+    "answer": "A petty food business operator must submit an application in Form A under Schedule 2, pay the fee specified in Schedule 3, follow the basic hygiene and safety requirements in Part I of Schedule 4, and provide a self-attested declaration in the Annexure-1 format.",
+    "expected_sources": [
+      {
+        "regulation": "LICENSING AND REGISTRATION OF FOOD BUSINESSES",
+        "chapter": 2,
+        "section": "2.1",
+        "subsection": "2.1.1"
+      },
+      {
+        "regulation": "LICENSING AND REGISTRATION OF FOOD BUSINESSES",
+        "schedule": "Schedule 2",
+        "annexure": "Annexure-I."
+      },
+      {
+        "regulation": "LICENSING AND REGISTRATION OF FOOD BUSINESSES",
+        "schedule": "Schedule 4"
+      }
+    ]
+  },
+  {
+    "question": "How long does the registering authority have to act on a petty food business registration application?",
+    "answer": "Within 7 days of receiving the application, the registering authority must grant registration, reject it with written reasons, or issue a notice for inspection. If an inspection is ordered, registration is to be granted within 30 days after the authority is satisfied with the premises' safety, hygiene, and sanitary conditions.",
+    "expected_sources": [
+      {
+        "regulation": "LICENSING AND REGISTRATION OF FOOD BUSINESSES",
+        "chapter": 2,
+        "section": "2.1",
+        "subsection": "2.1.1"
+      }
+    ]
+  },
+  {
+    "question": "Can I start a food business without a valid license?",
+    "answer": "Generally, no. A person must have a valid license before commencing a food business, subject to the registration provision for petty food business operators. The regulation also provides a limited commencement route where the licensing authority does not issue a license or communicate an inadequacy or inspection defect within the specified 60-day period.",
+    "expected_sources": [
+      {
+        "regulation": "LICENSING AND REGISTRATION OF FOOD BUSINESSES",
+        "chapter": 2,
+        "section": "2.1",
+        "subsection": "2.1.2"
+      },
+      {
+        "regulation": "LICENSING AND REGISTRATION OF FOOD BUSINESSES",
+        "chapter": 2,
+        "section": "2.1",
+        "subsection": "2.1.6"
+      }
+    ]
+  },
+  {
+    "question": "Which form and supporting documents are required when applying for a food business license?",
+    "answer": "The application must be made in Form B and accompanied by a self-attested declaration in the Annexure-1 format, copies of the documents listed in Annexure-2 of Schedule 2, and the applicable fee specified in Schedule 3.",
+    "expected_sources": [
+      {
+        "regulation": "LICENSING AND REGISTRATION OF FOOD BUSINESSES",
+        "chapter": 2,
+        "section": "2.1",
+        "subsection": "2.1.3"
+      },
+      {
+        "regulation": "LICENSING AND REGISTRATION OF FOOD BUSINESSES",
+        "schedule": "Schedule 2",
+        "annexure": "Annexure-I."
+      },
+      {
+        "regulation": "LICENSING AND REGISTRATION OF FOOD BUSINESSES",
+        "schedule": "Schedule 2",
+        "annexure": "Annexure-2"
+      }
+    ]
+  },
+  {
+    "question": "What happens if the licensing authority finds that my application is incomplete?",
+    "answer": "The licensing authority must notify the applicant in writing within 15 days of receiving the application and ask for the additional information or completion required. The applicant has 30 days from that notice to respond; otherwise, the license application stands rejected.",
+    "expected_sources": [
+      {
+        "regulation": "LICENSING AND REGISTRATION OF FOOD BUSINESSES",
+        "chapter": 2,
+        "section": "2.1",
+        "subsection": "2.1.4"
+      }
+    ]
+  },
+  {
+    "question": "What is the registration fee for a petty food business?",
+    "answer": "The registration fee is Rs 100 per annum.",
+    "expected_sources": [
+      {
+        "regulation": "LICENSING AND REGISTRATION OF FOOD BUSINESSES",
+        "schedule": "Schedule 3"
+      }
+    ]
+  },
+  {
+    "question": "When must a licensed food manufacturer file its annual return?",
+    "answer": "A licensed manufacturer or importer must submit a return in Form D-1, electronically or physically as prescribed, on or before 31 May each year for each class of food products handled during the previous financial year. A separate return is required for each license.",
+    "expected_sources": [
+      {
+        "regulation": "LICENSING AND REGISTRATION OF FOOD BUSINESSES",
+        "chapter": 2,
+        "section": "2.1",
+        "subsection": "2.1.13"
+      },
+      {
+        "regulation": "LICENSING AND REGISTRATION OF FOOD BUSINESSES",
+        "schedule": "Schedule 2",
+        "form": "Form D-1"
+      }
+    ]
+  },
+  {
+    "question": "How often must a licensed milk or milk-products manufacturer file returns?",
+    "answer": "A licensed manufacturer or importer engaged in manufacturing milk or milk products must file half-yearly returns in Form D-2 for 1 April to 30 September and 1 October to 31 March. Each return must be filed within one month after the relevant period ends.",
+    "expected_sources": [
+      {
+        "regulation": "LICENSING AND REGISTRATION OF FOOD BUSINESSES",
+        "chapter": 2,
+        "section": "2.1",
+        "subsection": "2.1.13"
+      },
+      {
+        "regulation": "LICENSING AND REGISTRATION OF FOOD BUSINESSES",
+        "schedule": "Schedule 2",
+        "form": "Form D-2"
+      }
+    ]
+  },
+  {
+    "question": "What must I do with my food license if I close my business?",
+    "answer": "Within 30 days of closing the business, the food business operator must inform the concerned licensing or registering authority in writing and surrender the registration certificate or license. Fees already paid are not refundable on surrender.",
+    "expected_sources": [
+      {
+        "regulation": "LICENSING AND REGISTRATION OF FOOD BUSINESSES",
+        "chapter": 2,
+        "section": "2.1",
+        "subsection": "2.1.7"
+      }
+    ]
+  },
+  {
+    "question": "Do I need approval before changing the products or layout covered by my food license?",
+    "answer": "Yes. The operator must inform the relevant authority of modifications, additions, product-category changes, layout changes, expansion, closure, or other material information before the change occurs. If the change alters the information on the license certificate, approval or endorsement on the license is required before starting business with the change.",
+    "expected_sources": [
+      {
+        "regulation": "LICENSING AND REGISTRATION OF FOOD BUSINESSES",
+        "chapter": 2,
+        "section": "2.1",
+        "subsection": "2.1.9"
+      }
+    ]
+  }
+]

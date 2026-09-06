@@ -19,7 +19,13 @@ from pre_processing.apply_amendment import apply_amendments
 from pre_processing.cleanup_markdown import cleanup_amendment, cleanup_regulation
 from pre_processing.pipeline import Item, Manifest, Stage, run_pipeline
 from pre_processing.regulation_parser import parse_regulation
-from ingestion.config import CHUNK_OVERLAP_TOKENS, CHUNK_SIZE_TOKENS, COLLECTION_NAME, EMBEDDING_MODEL
+from ingestion.config import (
+    CHUNK_OVERLAP_TOKENS,
+    CHUNK_SIZE_TOKENS,
+    COLLECTION_NAME,
+    EMBEDDING_MODEL,
+    PERSIST_DIR,
+)
 from ingestion.persist_embeddings import ingest_regulation
 from utils.pdf_to_md import ConversionMethod, convert_pdf
 
@@ -44,7 +50,7 @@ def build_stages(method: ConversionMethod) -> list[Stage]:
         apply_amendments(src, amendments, output_json_path=dst)
 
     def ingestion_stage(src: Path, dst: Path) -> None:
-        chroma_dir = dst.parent / "chroma"
+        chroma_dir = PROJECT_ROOT / PERSIST_DIR
         count = ingest_regulation(
             src,
             collection_name=COLLECTION_NAME,

@@ -16,4 +16,4 @@ EMBEDDING_BATCH_SIZE = 32
 
 # ---- Chroma store ---------------------------------------------------------
 COLLECTION_NAME = "fssai_regulations"
-PERSIST_DIR = "embeddings"
+PERSIST_DIR = "db"

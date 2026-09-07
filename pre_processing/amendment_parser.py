@@ -12,6 +12,11 @@ from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
 from prompts.parse_amendment_prompt import PARSE_AMENDMENT
+from pre_processing.config import (
+    AMENDMENT_PARSER_MODEL,
+    LLM_TEMPERATURE,
+    OPENROUTER_BASE_URL,
+)
 
 
 class AmendmentItem(BaseModel):
@@ -28,8 +33,7 @@ class AmendmentList(BaseModel):
     changes: list[AmendmentItem] = Field(default_factory=list)
 
 
-OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-DEFAULT_MODEL = "deepseek/deepseek-v4-flash"
+DEFAULT_MODEL = AMENDMENT_PARSER_MODEL
 
 load_dotenv()
 
@@ -50,7 +54,7 @@ def parse_amendment(
         model=model,
         base_url=OPENROUTER_BASE_URL,
         api_key=os.environ["OPENROUTER_API_KEY"],
-        temperature=0,
+        temperature=LLM_TEMPERATURE,
     ).with_structured_output(AmendmentList)
 
     result = llm.invoke([SystemMessage(content=PARSE_AMENDMENT), HumanMessage(content=document)])

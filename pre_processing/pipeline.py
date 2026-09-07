@@ -7,7 +7,7 @@ any relative subfolder (e.g. ``amendments/``). Layout per regulation directory::
     original/<stem>.pdf        (sources)
     converted/<stem>.md        (stage 1 output)
     cleaned/<stem>.md          (stage 2 output)
-    cleaned/<stem>.json        (stage 3 output)
+    parsed/<stem>.json         (stage 3 output)
 
 A ``Manifest`` records a hash of each stage's source so up-to-date outputs can be
 skipped on subsequent runs. Callers may select a subset of stages to run.
@@ -134,8 +134,8 @@ def run_pipeline(
     selected = set(selected) if selected is not None else None
     results: list[PipelineResult] = []
 
-    for item in items:
-        for stage in stages:
+    for stage in stages:
+        for item in items:
             if selected is not None and stage.name not in selected:
                 continue
             if not _applies(stage, item):
@@ -150,6 +150,7 @@ def run_pipeline(
 
             _processor(stage, item.kind)(source, output)
             manifest.record(output, sources, stage.name)
+            manifest.save()
             results.append(PipelineResult(stage.name, output, False))
 
     manifest.save()

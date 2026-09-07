@@ -31,11 +31,13 @@ def test_build_stages_kind_processors():
     assert set(clean.process) == {"regulation", "amendment"}
     parse = next(s for s in stages if s.name == "parse")
     assert set(parse.process) == {"regulation", "amendment"}
+    assert parse.in_dir == "cleaned"
+    assert parse.out_dir == "parsed"
 
 
 def test_post_amendment_stage_config():
     stage = next(s for s in build_stages("markitdown") if s.name == "post_amendment")
-    assert stage.in_dir == "cleaned"
+    assert stage.in_dir == "parsed"
     assert stage.in_ext == ".json"
     assert stage.out_dir == "post_amendment"
     assert stage.out_ext == ".final.json"

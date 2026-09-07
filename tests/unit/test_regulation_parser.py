@@ -42,7 +42,7 @@ def test_get_chunk_header_prefixes_subsection_chunks():
 
 
 def test_parse_regulation_populates_title_from_regulation_directory(tmp_path):
-    regulation_dir = tmp_path / "My Regulation" / "cleaned"
+    regulation_dir = tmp_path / "My Regulation" / "parsed"
     regulation_dir.mkdir(parents=True)
     path = regulation_dir / "Regulation.md"
     path.write_text("CHAPTER 1\nGENERAL\n", encoding="utf-8")

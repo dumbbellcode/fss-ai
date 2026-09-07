@@ -11,7 +11,7 @@ The pipeline turns FSSAI regulation PDFs into structured JSON that can be fed in
 1. **Download** — fetch regulation/amendment PDFs from FSSAI.
 2. **Convert** — PDF → Markdown (`*.converted.md`).
 3. **Clean** — strip gazette headers/footers (`*.cleaned.md`).
-4. **Parse** — regulation Markdown → structured JSON (chapters/sections/sub-sections/schedules/forms) (`*.cleaned.json`).
+4. **Parse** — regulation Markdown → structured JSON (chapters/sections/sub-sections/schedules/forms) under `parsed/`.
 5. **Amendments** — use an LLM to extract amendment changes (`date` + `changes`) from amendment notifications.
 6. **Apply** — use an LLM to apply amendment changes onto the parsed regulation JSON, producing `regulation.final.json`.
 7. **Ingest** — chunk the final regulation JSON, embed the chunks, and persist them to a Chroma vector store.
@@ -22,6 +22,7 @@ The pipeline turns FSSAI regulation PDFs into structured JSON that can be fed in
 assets/regulations/          # downloaded PDFs + generated markdown/json (gitignored)
 download_regulations.py      # fetch regulation PDFs
 pre_processing/
+  config.py                # preprocessing model and LLM settings
   cleanup_markdown.py        # PDF -> cleaned markdown
   regulation_parser.py       # regulation markdown -> structured JSON + pydantic DTOs
   amendment_parser.py        # amendment markdown -> amendment JSON (LLM)
@@ -58,7 +59,7 @@ uv run python utils/generate_sample.py --force            # ignore incremental c
 The pipeline is incremental: each stage is skipped when its output already exists
 and the source is unchanged, tracked in `<directory>/manifest.json`. Stages are
 `convert` (PDF → `.converted.md`), `clean` (`.converted.md` → `.cleaned.md`),
-`parse` (`.cleaned.md` → `.cleaned.json`), `post_amendment` (`.cleaned.json`
+`parse` (`cleaned/<stem>.md` → `parsed/<stem>.json`), `post_amendment` (`parsed/*.json`
 → `post_amendment/*.final.json`), and `ingestion` (final JSON → Chroma).
 
 ### Ingestion
@@ -126,7 +127,7 @@ uv run pytest -m integration -s
 ## Notes
 
 - Generated assets under `assets/`, the `.env` file, and the Chroma store under `db/` are gitignored.
-- The LLM steps use `openai/gpt-4o-mini` (apply) and `deepseek/deepseek-v4-flash` (extract) on OpenRouter by default.
+- The LLM steps use `openai/gpt-4o-mini` (apply) and `deepseek/deepseek-v4-flash` (extract) on OpenRouter by default; configure them in `pre_processing/config.py`.
 
 ## Roadmap
 

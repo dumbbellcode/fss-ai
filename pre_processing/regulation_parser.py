@@ -73,7 +73,7 @@ FORM_RE = re.compile(
     rf"^FORM\s+[{QUOTE_CHARS}]?([A-Z0-9]+(?:-[A-Z0-9]+)*)[{QUOTE_CHARS}]?$",
     re.IGNORECASE,
 )
-_STAGE_DIRS = {"original", "converted", "cleaned", "post_amendment", "amendments"}
+_STAGE_DIRS = {"original", "converted", "cleaned", "parsed", "post_amendment", "amendments"}
 
 
 def _regulation_title_from_path(path: Path) -> str:

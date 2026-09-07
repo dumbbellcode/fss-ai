@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Remove generated stage artifacts under the assets directory.
 
-The ``converted/`` and ``cleaned/`` stage directories and the pipeline manifest
-are removed; source PDFs under ``original/`` are kept.
+The generated stage directories and the pipeline manifest are removed; source
+PDFs under ``original/`` are kept.
 """
 
 import argparse
@@ -12,7 +12,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_TARGET = PROJECT_ROOT / "assets"
 
-GENERATED_DIRS = {"converted", "cleaned", "post_amendment", "ingestion"}
+GENERATED_DIRS = {"converted", "cleaned", "parsed", "post_amendment", "ingestion"}
 GENERATED_FILES = {"manifest.json"}
 
 

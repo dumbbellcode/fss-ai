@@ -30,7 +30,7 @@ from ingestion.persist_embeddings import ingest_regulation
 from utils.pdf_to_md import ConversionMethod, convert_pdf
 
 SAMPLE_DIRECTORIES = [
-    PROJECT_ROOT / "assets/regulations/01_Licensing_and_Registration_of_Food_Businesses",
+    PROJECT_ROOT / "assets/regulations/02_Food_Products_Standards_and_Food_Additives",
 ]
 
 ALL_STAGE_NAMES = ("convert", "clean", "parse", "post_amendment", "ingestion")
@@ -90,7 +90,7 @@ def build_stages(method: ConversionMethod) -> list[Stage]:
             "parse",
             "cleaned",
             ".md",
-            "cleaned",
+            "parsed",
             ".json",
             {
                 "regulation": parse_regulation_stage,
@@ -100,15 +100,15 @@ def build_stages(method: ConversionMethod) -> list[Stage]:
         ),
         Stage(
             "post_amendment",
-            "cleaned",
+            "parsed",
             ".json",
             "post_amendment",
             ".final.json",
             {"regulation": post_amendment_stage},
             only=lambda kind, stem: kind == "regulation" and stem == "Regulation",
             dependencies=lambda item: [
-                item.root / "cleaned" / f"{item.base_stem}.json",
-                *sorted((item.root / "cleaned" / "amendments").glob("*.json")),
+                item.root / "parsed" / f"{item.base_stem}.json",
+                *sorted((item.root / "parsed" / "amendments").glob("*.json")),
             ],
         ),
         Stage(

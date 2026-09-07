@@ -1,0 +1,82 @@
+flowchart TD
+    source["Regulation and amendment PDFs<br/>Downloaded into assets/regulations/"]
+    manifest["Manifest tracking<br/>Hashes outputs and skips unchanged work"]
+
+    subgraph DIRS["Generated directory layout"]
+        originalDir["original/<br/>Source PDFs"]
+        convertedDir["converted/<br/>PDF-to-Markdown outputs"]
+        cleanedDir["cleaned/<br/>Cleaned Markdown outputs"]
+        parsedDir["parsed/<br/>Structured regulation JSON"]
+        postDir["post_amendment/<br/>Final amended regulation JSON"]
+        ingestionDir["ingestion/<br/>Ingestion run metadata"]
+    end
+
+    subgraph PRE["Pre-processing"]
+        convert["Convert - utils/pdf_to_md.py<br/>PDF to Markdown using MarkItDown or PyMuPDF; writes converted/"]
+        cleanReg["Clean regulation - cleanup_markdown.py<br/>Removes gazette headers, footers, and excess whitespace; writes cleaned/"]
+        cleanAmend["Clean amendment - cleanup_markdown.py<br/>Normalizes notification text and removes repeated headers; writes cleaned/amendments/"]
+        parseReg["Parse regulation - regulation_parser.py<br/>Markdown to structured chapters, sections, schedules, and forms; writes parsed/"]
+        parseAmend["Parse amendments - amendment_parser.py<br/>LLM extracts dates and targeted amendment changes; writes parsed/amendments/"]
+        apply["Apply amendments - apply_amendment.py<br/>LLM applies changes cumulatively in date order; writes post_amendment/"]
+        final["Final regulation JSON<br/>Parsed regulation with amendments applied"]
+    end
+
+    subgraph ING["Ingestion"]
+        load["Load and validate - persist_embeddings.py<br/>Reads final JSON into the Regulation schema"]
+        chunks["Create chunks - chunks_creator.py<br/>Builds text chunks with source metadata and token-based splitting"]
+        embedDocs["Embed chunks - create_embeddings.py<br/>Creates vectors through the configured OpenRouter embedding model"]
+        persist["Persist vectors - persist_embeddings.py<br/>Upserts deterministic chunk IDs into shared Chroma"]
+    chroma[("db/<br/>Chroma collection: fssai_regulations")]
+    end
+
+    subgraph RET["Retrieval"]
+        question["User question<br/>Natural-language query"]
+        embedQuery["Embed query - create_embeddings.py<br/>Uses the same embedding model as document chunks"]
+        search["Search - retrieval/retrieve.py<br/>Queries Chroma for the nearest top-k chunks"]
+        results["Retrieved chunks<br/>Text, metadata, and distance scores"]
+    end
+
+    source --> originalDir
+    originalDir --> convert
+    convert --> convertedDir
+    convertedDir --> cleanReg
+    convertedDir --> cleanAmend
+    cleanReg --> cleanedDir
+    cleanAmend --> cleanedDir
+    cleanedDir --> parseReg
+    cleanedDir --> parseAmend
+    parseReg --> parsedDir
+    parseAmend --> parsedDir
+    parsedDir --> apply
+    apply --> final
+    final --> postDir
+    postDir --> load
+    load --> chunks
+    chunks --> embedDocs
+    chunks --> persist
+    embedDocs --> persist
+    persist --> ingestionDir
+    persist --> chroma
+    question --> embedQuery
+    embedQuery --> search
+    chroma --> search
+    search --> results
+
+    convert -.-> manifest
+    cleanReg -.-> manifest
+    cleanAmend -.-> manifest
+    parseReg -.-> manifest
+    parseAmend -.-> manifest
+    apply -.-> manifest
+    load -.-> manifest
+    manifest -.-> convert
+
+    classDef deterministic fill:#e8f3ff,stroke:#2b6cb0,color:#102a43
+    classDef llm fill:#fff4db,stroke:#b7791f,color:#5f370e
+    classDef store fill:#e8fff1,stroke:#2f855a,color:#163b26
+    classDef control fill:#f3e8ff,stroke:#805ad5,color:#44337a
+
+    class convert,cleanReg,cleanAmend,parseReg,load,chunks,embedDocs,embedQuery,search deterministic
+    class parseAmend,apply llm
+    class chroma,persist,results store
+    class manifest control

@@ -14,6 +14,12 @@ from langchain_core.messages import SystemMessage
 from langchain_openai import ChatOpenAI
 
 from pre_processing.amendment_parser import AmendmentItem, AmendmentList
+from pre_processing.config import (
+    AMENDMENT_APPLIER_MODEL,
+    LLM_TEMPERATURE,
+    MAX_AMENDMENT_WORKERS,
+    OPENROUTER_BASE_URL,
+)
 from pre_processing.regulation_parser import Regulation, Schedule, Subsection
 
 APPLY_AMENDMENT_PROMPT = """
@@ -41,9 +47,8 @@ Return only the complete text of the new section.
 """
 
 
-OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-DEFAULT_MODEL = "openai/gpt-4o-mini"
-MAX_WORKERS = 7
+DEFAULT_MODEL = AMENDMENT_APPLIER_MODEL
+MAX_WORKERS = MAX_AMENDMENT_WORKERS
 
 load_dotenv()
 
@@ -199,7 +204,7 @@ def _build_llm(model: str) -> ChatOpenAI:
         model=model,
         base_url=OPENROUTER_BASE_URL,
         api_key=os.environ["OPENROUTER_API_KEY"],
-        temperature=0,
+        temperature=LLM_TEMPERATURE,
     )
 
 

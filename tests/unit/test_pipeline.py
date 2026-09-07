@@ -52,6 +52,21 @@ def test_amendments_preserve_subfolder(tmp_path):
     assert len(results) == 3
 
 
+def test_stages_complete_for_all_items_before_next_stage(tmp_path):
+    first = _make_item(tmp_path / "first")
+    second = _make_item(tmp_path / "second")
+    results = run_pipeline([first, second], _make_stages(), _manifest(tmp_path))
+
+    assert [result.stage for result in results] == [
+        "convert",
+        "convert",
+        "clean",
+        "clean",
+        "parse",
+        "parse",
+    ]
+
+
 def test_incremental_run_skips_up_to_date(tmp_path):
     item = _make_item(tmp_path)
     manifest = _manifest(tmp_path)

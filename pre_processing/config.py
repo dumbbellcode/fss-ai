@@ -1,13 +1,20 @@
 """Central configuration for the preprocessing pipeline."""
 
-# ---- OpenRouter ------------------------------------------------------------
-OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-LLM_TEMPERATURE = 0
+from dataclasses import dataclass
 
-# Models are configured per LLM-backed preprocessing operation because the
-# extraction and amendment-application tasks have different requirements.
-AMENDMENT_PARSER_MODEL = "deepseek/deepseek-v4-flash"
-AMENDMENT_APPLIER_MODEL = "openai/gpt-4o-mini"
 
-# ---- Amendment application -------------------------------------------------
-MAX_AMENDMENT_WORKERS = 7
+@dataclass(frozen=True)
+class PreprocessingConfig:
+    """Runtime settings for LLM-backed preprocessing operations."""
+
+    base_url: str = "https://openrouter.ai/api/v1"
+    api_key_env: str = "OPENROUTER_API_KEY"
+    temperature: float = 0
+    amendment_parser_model: str = "google/gemini-2.5-flash-lite"
+    amendment_parser_max_tokens: int = 8_192
+    amendment_applier_model: str = "openai/gpt-4o-mini"
+    amendment_applier_max_tokens: int = 8_192
+    max_amendment_workers: int = 7
+
+
+DEFAULT_CONFIG = PreprocessingConfig()

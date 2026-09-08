@@ -1,19 +1,20 @@
 """Central configuration for the ingestion pipeline."""
 
-# ---- Chunking -------------------------------------------------------------
-# Chunks are sized in tokens (not characters) so they map cleanly to the
-# embedding model's token limit and the LLM context window. These are the
-# defaults; ``create_chunks`` accepts overrides for benchmarking.
-CHUNK_SIZE_TOKENS = 500
-CHUNK_OVERLAP_TOKENS = 50
-SPLIT_SEPARATORS = ["\n\n", "\n", ". ", " "]
+from dataclasses import dataclass
 
-# ---- Embeddings -----------------------------------------------------------
-OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-EMBEDDING_MODEL = "openai/text-embedding-3-large"
-# Keep each embeddings API request below provider prompt-token limits.
-EMBEDDING_BATCH_SIZE = 32
 
-# ---- Chroma store ---------------------------------------------------------
-COLLECTION_NAME = "fssai_regulations"
-PERSIST_DIR = "db"
+@dataclass(frozen=True)
+class IngestionConfig:
+    """Runtime settings for chunking, embeddings, and vector storage."""
+
+    chunk_size_tokens: int = 500
+    chunk_overlap_tokens: int = 50
+    split_separators: tuple[str, ...] = ("\n\n", "\n", ". ", " ")
+    base_url: str = "https://openrouter.ai/api/v1"
+    embedding_model: str = "openai/text-embedding-3-large"
+    embedding_batch_size: int = 32
+    collection_name: str = "fssai_regulations"
+    persist_dir: str = "db"
+
+
+DEFAULT_CONFIG = IngestionConfig()

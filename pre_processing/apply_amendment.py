@@ -14,12 +14,7 @@ from langchain_core.messages import SystemMessage
 from langchain_openai import ChatOpenAI
 
 from pre_processing.amendment_parser import AmendmentItem, AmendmentList
-from pre_processing.config import (
-    AMENDMENT_APPLIER_MODEL,
-    LLM_TEMPERATURE,
-    MAX_AMENDMENT_WORKERS,
-    OPENROUTER_BASE_URL,
-)
+from pre_processing.config import DEFAULT_CONFIG, PreprocessingConfig
 from pre_processing.regulation_parser import Regulation, Schedule, Subsection
 
 APPLY_AMENDMENT_PROMPT = """
@@ -47,8 +42,8 @@ Return only the complete text of the new section.
 """
 
 
-DEFAULT_MODEL = AMENDMENT_APPLIER_MODEL
-MAX_WORKERS = MAX_AMENDMENT_WORKERS
+DEFAULT_MODEL = DEFAULT_CONFIG.amendment_applier_model
+MAX_WORKERS = DEFAULT_CONFIG.max_amendment_workers
 
 load_dotenv()
 
@@ -199,12 +194,13 @@ def _process_group(llm, group: list) -> None:
             print(f"Inserted sub-regulation: {subregulation_no} ({elapsed:.1f}s)", flush=True)
 
 
-def _build_llm(model: str) -> ChatOpenAI:
+def _build_llm(model: str, config: PreprocessingConfig) -> ChatOpenAI:
     return ChatOpenAI(
         model=model,
-        base_url=OPENROUTER_BASE_URL,
-        api_key=os.environ["OPENROUTER_API_KEY"],
-        temperature=LLM_TEMPERATURE,
+        base_url=config.base_url,
+        api_key=os.environ[config.api_key_env],
+        temperature=config.temperature,
+        max_tokens=config.amendment_applier_max_tokens,
     )
 
 
@@ -212,10 +208,11 @@ def apply_amendment_to_regulation(
     regulation: Regulation,
     amendment: AmendmentList,
     llm=None,
-    model: str = DEFAULT_MODEL,
+    model: str | None = None,
+    config: PreprocessingConfig = DEFAULT_CONFIG,
 ) -> Regulation:
     """Apply every change from an amendment onto an in-memory regulation."""
-    llm = llm or _build_llm(model)
+    llm = llm or _build_llm(model or config.amendment_applier_model, config)
 
     groups: dict[int, list] = {}
     for change in amendment.changes:
@@ -225,7 +222,7 @@ def apply_amendment_to_regulation(
             continue
         groups.setdefault(id(target[1]), []).append((change, target))
 
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+    with ThreadPoolExecutor(max_workers=config.max_amendment_workers) as executor:
         futures = [executor.submit(_process_group, llm, group) for group in groups.values()]
         for future in futures:
             future.result()
@@ -241,7 +238,8 @@ def apply_amendment(
     regulation_json_path: str | Path,
     amendment_json_path: str | Path,
     output_json_path: str | Path | None = None,
-    model: str = DEFAULT_MODEL,
+    model: str | None = None,
+    config: PreprocessingConfig = DEFAULT_CONFIG,
 ) -> Regulation:
     """Apply every change from an amendment JSON onto a regulation JSON.
 
@@ -252,7 +250,7 @@ def apply_amendment(
     regulation = Regulation.model_validate_json(Path(regulation_json_path).read_text(encoding="utf-8"))
     amendment = AmendmentList.model_validate_json(Path(amendment_json_path).read_text(encoding="utf-8"))
 
-    regulation = apply_amendment_to_regulation(regulation, amendment, model=model)
+    regulation = apply_amendment_to_regulation(regulation, amendment, model=model, config=config)
 
     output_path = (
         Path(output_json_path)
@@ -272,7 +270,8 @@ def apply_amendments(
     regulation_json_path: str | Path,
     amendment_json_paths: Sequence[str | Path],
     output_json_path: str | Path | None = None,
-    model: str = DEFAULT_MODEL,
+    model: str | None = None,
+    config: PreprocessingConfig = DEFAULT_CONFIG,
 ) -> Regulation:
     """Apply a sequence of amendments onto a regulation, in date order.
 
@@ -282,13 +281,13 @@ def apply_amendments(
     """
     regulation = Regulation.model_validate_json(Path(regulation_json_path).read_text(encoding="utf-8"))
     ordered = sorted((Path(path) for path in amendment_json_paths), key=_amendment_date)
-    llm = _build_llm(model)
+    llm = _build_llm(model or config.amendment_applier_model, config)
 
     for amendment_path in ordered:
         amendment = AmendmentList.model_validate_json(amendment_path.read_text(encoding="utf-8"))
         started = time.perf_counter()
         print(f"Applying amendment {amendment.date}: {amendment_path}", flush=True)
-        regulation = apply_amendment_to_regulation(regulation, amendment, llm=llm)
+        regulation = apply_amendment_to_regulation(regulation, amendment, llm=llm, config=config)
         print(f"Amendment {amendment.date} applied in {time.perf_counter() - started:.1f}s", flush=True)
 
     if output_json_path:

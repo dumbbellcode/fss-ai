@@ -9,26 +9,36 @@ They require ``OPENROUTER_API_KEY`` in the environment (or ``.env``).
 """
 
 import os
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from pre_processing.apply_amendment import apply_amendment
+from pre_processing.config import DEFAULT_CONFIG
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 FIXTURES_DIR = PROJECT_ROOT / "tests" / "fixtures"
 REGULATION_JSON = FIXTURES_DIR / "regulation.json"
+TEST_CONFIG = replace(
+    DEFAULT_CONFIG,
+    base_url="https://api.groq.com/openai/v1",
+    api_key_env="GROQ_API_KEY",
+    amendment_applier_model="openai/gpt-oss-120b",
+    amendment_applier_max_tokens=4_096,
+    max_amendment_workers=1,
+)
 
 pytestmark = [
     pytest.mark.integration,
-    pytest.mark.skipif(not os.environ.get("OPENROUTER_API_KEY"), reason="OPENROUTER_API_KEY not set"),
+    pytest.mark.skipif(not os.environ.get("GROQ_API_KEY"), reason="GROQ_API_KEY not set"),
 ]
 
 
 def _run(amendment_name: str, tmp_path: Path):
     amendment_json = FIXTURES_DIR / amendment_name
     output = tmp_path / "Regulation.final.json"
-    result = apply_amendment(REGULATION_JSON, amendment_json, output)
+    result = apply_amendment(REGULATION_JSON, amendment_json, output, config=TEST_CONFIG)
     assert output.exists()
     return result
 

@@ -192,7 +192,7 @@ def test_apply_amendments_applies_in_date_order(tmp_path):
     applied = []
     original = module.apply_amendment_to_regulation
     try:
-        def recording(regulation, amendment, llm=None, model=module.DEFAULT_MODEL):
+        def recording(regulation, amendment, llm=None, model=module.DEFAULT_MODEL, config=None):
             applied.append(amendment.date)
             return regulation
 

@@ -3,6 +3,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from pre_processing.amendment_parser import AmendmentItem, AmendmentList, parse_amendment
+from pre_processing.config import PreprocessingConfig
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 FIXTURES_DIR = PROJECT_ROOT / "tests" / "fixtures"
@@ -58,6 +59,20 @@ def test_parse_amendment_invokes_with_document(tmp_path):
     messages = fake.invoke.call_args[0][0]
     assert len(messages) == 2
     assert SAMPLE_MD.read_text(encoding="utf-8") in messages[1].content
+
+
+def test_parse_amendment_uses_injected_config(tmp_path):
+    output = tmp_path / "amendment.json"
+    result = AmendmentList(date="2026-06-23", changes=[])
+    config = PreprocessingConfig(
+        amendment_parser_model="test/parser",
+        amendment_parser_max_tokens=123,
+    )
+    with patch("pre_processing.amendment_parser.ChatOpenAI", return_value=_fake_llm(result)) as chat:
+        parse_amendment(SAMPLE_MD, output, config=config)
+
+    assert chat.call_args.kwargs["model"] == "test/parser"
+    assert chat.call_args.kwargs["max_tokens"] == 123
 
 
 def test_amendment_item_optional_fields():

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import chromadb
 
-from ingestion.config import COLLECTION_NAME, EMBEDDING_MODEL, PERSIST_DIR
+from ingestion.config import DEFAULT_CONFIG, IngestionConfig
 from ingestion.create_embeddings import build_embeddings
 
 
@@ -25,11 +25,12 @@ class RetrievedChunk:
 
 def retrieve(
     question: str,
-    collection_name: str = COLLECTION_NAME,
-    persist_dir: str | Path = PERSIST_DIR,
-    model: str = EMBEDDING_MODEL,
+    collection_name: str | None = None,
+    persist_dir: str | Path | None = None,
+    model: str | None = None,
     top_k: int = 5,
     where: dict | None = None,
+    config: IngestionConfig = DEFAULT_CONFIG,
 ) -> list[RetrievedChunk]:
     """Retrieve the most similar indexed chunks for ``question``."""
     if not question.strip():
@@ -37,9 +38,11 @@ def retrieve(
     if top_k < 1:
         raise ValueError("top_k must be at least 1")
 
+    collection_name = collection_name or config.collection_name
+    persist_dir = persist_dir or config.persist_dir
     client = chromadb.PersistentClient(path=str(persist_dir))
     collection = client.get_collection(collection_name)
-    query_embedding = build_embeddings(model).embed_query(question)
+    query_embedding = build_embeddings(model=model, config=config).embed_query(question)
 
     query_args = {
         "query_embeddings": [query_embedding],
@@ -62,9 +65,9 @@ def retrieve(
 def main() -> None:
     parser = argparse.ArgumentParser(description="Retrieve regulation chunks for a question.")
     parser.add_argument("question")
-    parser.add_argument("--collection", default=COLLECTION_NAME)
-    parser.add_argument("--persist-dir", default=PERSIST_DIR)
-    parser.add_argument("--model", default=EMBEDDING_MODEL)
+    parser.add_argument("--collection", default=DEFAULT_CONFIG.collection_name)
+    parser.add_argument("--persist-dir", default=DEFAULT_CONFIG.persist_dir)
+    parser.add_argument("--model", default=DEFAULT_CONFIG.embedding_model)
     parser.add_argument("--top-k", type=int, default=5)
     args = parser.parse_args()
 

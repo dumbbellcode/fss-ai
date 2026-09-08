@@ -25,7 +25,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pydantic import BaseModel, Field
 import tiktoken
 
-from ingestion.config import CHUNK_OVERLAP_TOKENS, CHUNK_SIZE_TOKENS, SPLIT_SEPARATORS
+from ingestion.config import DEFAULT_CONFIG, IngestionConfig
 from pre_processing.regulation_parser import Regulation
 
 _encoding = tiktoken.get_encoding("cl100k_base")
@@ -76,7 +76,12 @@ class Chunk:
             self.metadata = ChunkMetadata.model_validate(self.metadata)
 
 
-def _split_long_text(text: str, chunk_size_tokens: int, chunk_overlap_tokens: int) -> list[str]:
+def _split_long_text(
+    text: str,
+    chunk_size_tokens: int,
+    chunk_overlap_tokens: int,
+    separators: tuple[str, ...],
+) -> list[str]:
     """Split ``text`` into one or more parts, splitting only when it is long.
 
     Length is measured in tokens (``cl100k_base``); only bodies over
@@ -90,7 +95,7 @@ def _split_long_text(text: str, chunk_size_tokens: int, chunk_overlap_tokens: in
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=chunk_size_tokens,
         chunk_overlap=chunk_overlap_tokens,
-        separators=SPLIT_SEPARATORS,
+        separators=separators,
         length_function=_token_len,
     )
     return [part.strip() for part in splitter.split_text(text) if part.strip()]
@@ -103,8 +108,9 @@ def _emit(
     chunks: list[Chunk],
     chunk_size_tokens: int,
     chunk_overlap_tokens: int,
+    separators: tuple[str, ...],
 ) -> None:
-    parts = _split_long_text(body, chunk_size_tokens, chunk_overlap_tokens)
+    parts = _split_long_text(body, chunk_size_tokens, chunk_overlap_tokens, separators)
     for index, part in enumerate(parts, start=1):
         meta = dict(base_meta)
         if len(parts) > 1:
@@ -114,8 +120,9 @@ def _emit(
 
 def create_chunks(
     regulation: Regulation,
-    chunk_size_tokens: int = CHUNK_SIZE_TOKENS,
-    chunk_overlap_tokens: int = CHUNK_OVERLAP_TOKENS,
+    chunk_size_tokens: int | None = None,
+    chunk_overlap_tokens: int | None = None,
+    config: IngestionConfig = DEFAULT_CONFIG,
 ) -> list[Chunk]:
     """Chunk a parsed ``Regulation`` into embedding-ready text chunks.
 
@@ -123,6 +130,8 @@ def create_chunks(
     and ``chunk_overlap_tokens`` override the config defaults (useful when
     benchmarking different chunking strategies).
     """
+    chunk_size_tokens = chunk_size_tokens if chunk_size_tokens is not None else config.chunk_size_tokens
+    chunk_overlap_tokens = chunk_overlap_tokens if chunk_overlap_tokens is not None else config.chunk_overlap_tokens
     chunks: list[Chunk] = []
 
     for chapter in regulation.chapters:
@@ -139,6 +148,7 @@ def create_chunks(
                 chunk_size_tokens=chunk_size_tokens,
                 chunk_overlap_tokens=chunk_overlap_tokens,
                 chunks=chunks,
+                separators=config.split_separators,
             )
         for section in chapter.sections:
             for subsection in section.sub_sections:
@@ -154,6 +164,7 @@ def create_chunks(
                     chunk_size_tokens=chunk_size_tokens,
                     chunk_overlap_tokens=chunk_overlap_tokens,
                     chunks=chunks,
+                    separators=config.split_separators,
                 )
 
     for schedule in regulation.schedules:
@@ -165,6 +176,7 @@ def create_chunks(
             chunk_size_tokens=chunk_size_tokens,
             chunk_overlap_tokens=chunk_overlap_tokens,
             chunks=chunks,
+            separators=config.split_separators,
         )
         for form in schedule.forms:
             _emit(
@@ -179,6 +191,7 @@ def create_chunks(
                 chunk_size_tokens=chunk_size_tokens,
                 chunk_overlap_tokens=chunk_overlap_tokens,
                 chunks=chunks,
+                separators=config.split_separators,
             )
         for annexure in schedule.annexures:
             _emit(
@@ -193,6 +206,7 @@ def create_chunks(
                 chunk_size_tokens=chunk_size_tokens,
                 chunk_overlap_tokens=chunk_overlap_tokens,
                 chunks=chunks,
+                separators=config.split_separators,
             )
 
     return chunks

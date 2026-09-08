@@ -10,26 +10,33 @@ from dotenv import load_dotenv
 from langchain_openai import OpenAIEmbeddings
 
 from ingestion.chunks_creator import Chunk
-from ingestion.config import EMBEDDING_BATCH_SIZE, EMBEDDING_MODEL, OPENROUTER_BASE_URL
+from ingestion.config import DEFAULT_CONFIG, IngestionConfig
 
-DEFAULT_EMBEDDING_MODEL = EMBEDDING_MODEL
+DEFAULT_EMBEDDING_MODEL = DEFAULT_CONFIG.embedding_model
 
 load_dotenv()
 
 
-def build_embeddings(model: str = DEFAULT_EMBEDDING_MODEL) -> OpenAIEmbeddings:
+def build_embeddings(
+    model: str | None = None,
+    config: IngestionConfig = DEFAULT_CONFIG,
+) -> OpenAIEmbeddings:
     return OpenAIEmbeddings(
-        model=model,
-        base_url=OPENROUTER_BASE_URL,
+        model=model or config.embedding_model,
+        base_url=config.base_url,
         api_key=os.environ["OPENROUTER_API_KEY"],
-        chunk_size=EMBEDDING_BATCH_SIZE,
+        chunk_size=config.embedding_batch_size,
         check_embedding_ctx_length=False,
     )
 
 
-def create_embeddings(chunks: list[Chunk], model: str = DEFAULT_EMBEDDING_MODEL) -> list[list[float]]:
+def create_embeddings(
+    chunks: list[Chunk],
+    model: str | None = None,
+    config: IngestionConfig = DEFAULT_CONFIG,
+) -> list[list[float]]:
     """Embed the text of ``chunks`` into a list of vectors, one per chunk."""
-    embedder = build_embeddings(model)
+    embedder = build_embeddings(model=model, config=config)
     return embedder.embed_documents([chunk.text for chunk in chunks])
 
 

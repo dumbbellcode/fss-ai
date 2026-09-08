@@ -7,7 +7,7 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
-from ingestion.config import COLLECTION_NAME, EMBEDDING_MODEL, PERSIST_DIR
+from ingestion.config import DEFAULT_CONFIG as DEFAULT_INGESTION_CONFIG, IngestionConfig
 from retrieval.retrieve import RetrievedChunk, retrieve
 
 from evals.retrieval_metrics import calculate_metadata_metrics
@@ -29,16 +29,20 @@ def evaluate_goldens(
     goldens: Sequence[Golden],
     *,
     retrieve_fn: Callable[..., list[RetrievedChunk]] = retrieve,
-    collection_name: str = COLLECTION_NAME,
-    persist_dir: str | Path = PERSIST_DIR,
-    embedding_model: str = EMBEDDING_MODEL,
+    collection_name: str | None = None,
+    persist_dir: str | Path | None = None,
+    embedding_model: str | None = None,
     top_k: int = 5,
+    ingestion_config: IngestionConfig = DEFAULT_INGESTION_CONFIG,
 ) -> dict[str, Any]:
     """Retrieve context and calculate metadata metrics for every golden."""
     if top_k < 1:
         raise ValueError("top_k must be at least 1")
 
     results: list[dict[str, Any]] = []
+    collection_name = collection_name or ingestion_config.collection_name
+    persist_dir = persist_dir or ingestion_config.persist_dir
+    embedding_model = embedding_model or ingestion_config.embedding_model
     for index, golden in enumerate(goldens, start=1):
         chunks = retrieve_fn(
             golden.question,
@@ -46,6 +50,7 @@ def evaluate_goldens(
             persist_dir=persist_dir,
             model=embedding_model,
             top_k=top_k,
+            config=ingestion_config,
         )
         metadata_scores = calculate_metadata_metrics(
             golden.expected_sources,
@@ -86,9 +91,9 @@ def main() -> None:
         description="Evaluate metadata precision, recall, and nDCG for regulation goldens."
     )
     parser.add_argument("--goldens", type=Path, default=DEFAULT_GOLDENS)
-    parser.add_argument("--collection", default=COLLECTION_NAME)
-    parser.add_argument("--persist-dir", type=Path, default=PERSIST_DIR)
-    parser.add_argument("--embedding-model", default=EMBEDDING_MODEL)
+    parser.add_argument("--collection", default=DEFAULT_INGESTION_CONFIG.collection_name)
+    parser.add_argument("--persist-dir", type=Path, default=DEFAULT_INGESTION_CONFIG.persist_dir)
+    parser.add_argument("--embedding-model", default=DEFAULT_INGESTION_CONFIG.embedding_model)
     parser.add_argument("--top-k", type=int, default=5)
     parser.add_argument("--output", type=Path, help="Write the JSON report to this path")
     args = parser.parse_args()

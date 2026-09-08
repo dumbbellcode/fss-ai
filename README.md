@@ -28,7 +28,7 @@ pre_processing/
   amendment_parser.py        # amendment markdown -> amendment JSON (LLM)
   apply_amendment.py         # apply amendment JSON onto regulation JSON (LLM)
 ingestion/
-  config.py                # chunking / embedding / chroma settings
+  config.py                # injectable chunking / embedding / chroma settings
   chunks_creator.py        # regulation JSON -> text chunks with metadata
   create_embeddings.py     # chunks -> embeddings (OpenRouter)
   persist_embeddings.py    # chunks + embeddings -> Chroma
@@ -127,7 +127,7 @@ uv run pytest -m integration -s
 ## Notes
 
 - Generated assets under `assets/`, the `.env` file, and the Chroma store under `db/` are gitignored.
-- The LLM steps use `openai/gpt-4o-mini` (apply) and `deepseek/deepseek-v4-flash` (extract) on OpenRouter by default; configure them in `pre_processing/config.py`.
+- The LLM steps use `openai/gpt-4o-mini` (apply) and `google/gemini-2.5-flash-lite` (extract) on OpenRouter by default. Pass a `PreprocessingConfig` to the preprocessing functions to override models or runtime settings; keep `OPENROUTER_API_KEY` in the environment.
 
 ## Roadmap
 

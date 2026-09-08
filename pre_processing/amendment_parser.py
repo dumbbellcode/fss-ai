@@ -12,11 +12,7 @@ from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
 from prompts.parse_amendment_prompt import PARSE_AMENDMENT
-from pre_processing.config import (
-    AMENDMENT_PARSER_MODEL,
-    LLM_TEMPERATURE,
-    OPENROUTER_BASE_URL,
-)
+from pre_processing.config import DEFAULT_CONFIG, PreprocessingConfig
 
 
 class AmendmentItem(BaseModel):
@@ -33,7 +29,7 @@ class AmendmentList(BaseModel):
     changes: list[AmendmentItem] = Field(default_factory=list)
 
 
-DEFAULT_MODEL = AMENDMENT_PARSER_MODEL
+DEFAULT_MODEL = DEFAULT_CONFIG.amendment_parser_model
 
 load_dotenv()
 
@@ -41,7 +37,8 @@ load_dotenv()
 def parse_amendment(
     md_path: str | Path,
     output_json_path: str | Path | None = None,
-    model: str = DEFAULT_MODEL,
+    model: str | None = None,
+    config: PreprocessingConfig = DEFAULT_CONFIG,
 ) -> list[AmendmentItem]:
     """Extract amendments from an amendment Markdown file.
 
@@ -51,10 +48,11 @@ def parse_amendment(
     output_path = Path(output_json_path) if output_json_path else Path(md_path).with_suffix(".json")
     document = Path(md_path).read_text(encoding="utf-8")
     llm = ChatOpenAI(
-        model=model,
-        base_url=OPENROUTER_BASE_URL,
-        api_key=os.environ["OPENROUTER_API_KEY"],
-        temperature=LLM_TEMPERATURE,
+        model=model or config.amendment_parser_model,
+        base_url=config.base_url,
+        api_key=os.environ[config.api_key_env],
+        temperature=config.temperature,
+        max_tokens=config.amendment_parser_max_tokens,
     ).with_structured_output(AmendmentList)
 
     result = llm.invoke([SystemMessage(content=PARSE_AMENDMENT), HumanMessage(content=document)])

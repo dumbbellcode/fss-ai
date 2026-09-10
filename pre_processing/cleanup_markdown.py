@@ -58,6 +58,23 @@ def cleanup_amendment(md_path: str | Path, output_md_path: str | Path) -> None:
         ),
         None,
     )
+    def _next_content_index(start: int) -> int:
+        index = start
+        while index < len(lines) and not normalized(lines[index]):
+            index += 1
+        return index
+
+    if notification_index is None:
+        notification_index = next(
+            (
+                index
+                for index, line in enumerate(lines)
+                if normalized(line).upper() == "FOOD SAFETY AND STANDARDS AUTHORITY OF INDIA"
+                and _next_content_index(index + 1) < len(lines)
+                and normalized(lines[_next_content_index(index + 1)]).upper() == "NOTIFICATION"
+            ),
+            None,
+        )
     if notification_index is not None:
         lines = lines[notification_index:]
 

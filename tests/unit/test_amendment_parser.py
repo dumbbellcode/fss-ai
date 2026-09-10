@@ -2,7 +2,12 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from pre_processing.amendment_parser import AmendmentItem, AmendmentList, parse_amendment
+from pre_processing.amendment_parser import (
+    AmendmentItem,
+    AmendmentList,
+    _restore_truncated_text,
+    parse_amendment,
+)
 from pre_processing.config import PreprocessingConfig
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -84,3 +89,21 @@ def test_amendment_item_optional_fields():
     schedule_item = AmendmentItem(schedule="2", annexure="3", amendment_text="x")
     assert schedule_item.schedule == "2"
     assert schedule_item.regulation is None
+
+
+def test_restore_truncated_amendment_text_from_source_block():
+    change = AmendmentItem(
+        regulation="2.2",
+        subregulation="2.2.7",
+        amendment_text="in sub-regulation 2.2.7, the following entries shall be substituted, namely:…",
+    )
+    document = (
+        "(d) in sub-regulation 2.2.7, the following entries shall be substituted, namely:-\n"
+        "| Parameter | Value |\n| --- | --- |\n| Virgin olive oil | 0.03 |\n"
+        "(e) in sub-regulation 2.2.9, another amendment.\n"
+    )
+
+    _restore_truncated_text([change], document)
+
+    assert "Virgin olive oil" in change.amendment_text
+    assert "…" not in change.amendment_text

@@ -43,7 +43,7 @@ tests/                       # pytest unit tests
 ## Requirements
 
 - Python 3.12 (managed with `uv`)
-- An OpenRouter API key in a `.env` file (`OPENROUTER_API_KEY=...`) for the LLM-based steps
+- An OpenRouter API key in a `.env` file (`OPENROUTER_API_KEY=...`) for the LLM-based preprocessing steps
 
 ## Quick start
 
@@ -127,7 +127,7 @@ uv run pytest -m integration -s
 ## Notes
 
 - Generated assets under `assets/`, the `.env` file, and the Chroma store under `db/` are gitignored.
-- The LLM steps use `openai/gpt-4o-mini` (apply) and `google/gemini-2.5-flash-lite` (extract) on OpenRouter by default. Pass a `PreprocessingConfig` to the preprocessing functions to override models or runtime settings; keep `OPENROUTER_API_KEY` in the environment.
+- LLM-based preprocessing uses `openai/gpt-oss-120b` through OpenRouter and pins requests to the CoreWeave provider by default. Pass a `PreprocessingConfig` to override models, provider routing, or runtime settings; keep `OPENROUTER_API_KEY` in the environment. Ingestion embeddings remain configurable separately in `ingestion/config.py`.
 
 ## Roadmap
 

@@ -52,6 +52,35 @@ def test_parse_regulation_populates_title_from_regulation_directory(tmp_path):
     assert regulation.title == "My Regulation"
 
 
+def test_parse_regulation_accepts_colon_after_chapter_number(tmp_path):
+    path = tmp_path / "Regulation.md"
+    path.write_text(
+        "CHAPTER 1\nGENERAL\nChapter 3:\nSUBSTANCES ADDED TO FOOD\n3.1: Additives\n",
+        encoding="utf-8",
+    )
+
+    regulation = parse_regulation(path)
+
+    assert [(chapter.no, chapter.title) for chapter in regulation.chapters] == [
+        (1, "GENERAL"),
+        (3, "SUBSTANCES ADDED TO FOOD"),
+    ]
+
+
+def test_parse_regulation_accepts_period_after_section_number(tmp_path):
+    path = tmp_path / "Regulation.md"
+    path.write_text(
+        "CHAPTER 2\nFOOD PRODUCT STANDARDS\n"
+        "2.4 Existing section\nExisting text\n"
+        "2.5. Meat and Meat Products\n2.5.1 Definition\nDefinition text\n",
+        encoding="utf-8",
+    )
+
+    regulation = parse_regulation(path)
+
+    assert [section.no for section in regulation.chapters[0].sections] == ["2.4", "2.5"]
+
+
 def test_parse_regulation_preserves_schedule_text(tmp_path):
     regulation_dir = tmp_path / "My Regulation" / "cleaned"
     regulation_dir.mkdir(parents=True)

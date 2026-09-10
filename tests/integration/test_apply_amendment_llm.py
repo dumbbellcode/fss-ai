@@ -22,8 +22,8 @@ FIXTURES_DIR = PROJECT_ROOT / "tests" / "fixtures"
 REGULATION_JSON = FIXTURES_DIR / "regulation.json"
 TEST_CONFIG = replace(
     DEFAULT_CONFIG,
-    base_url="https://api.groq.com/openai/v1",
-    api_key_env="GROQ_API_KEY",
+    base_url="https://openrouter.ai/api/v1",
+    api_key_env="OPENROUTER_API_KEY",
     amendment_applier_model="openai/gpt-oss-120b",
     amendment_applier_max_tokens=4_096,
     max_amendment_workers=1,
@@ -31,7 +31,7 @@ TEST_CONFIG = replace(
 
 pytestmark = [
     pytest.mark.integration,
-    pytest.mark.skipif(not os.environ.get("GROQ_API_KEY"), reason="GROQ_API_KEY not set"),
+    pytest.mark.skipif(not os.environ.get("OPENROUTER_API_KEY"), reason="OPENROUTER_API_KEY not set"),
 ]
 
 

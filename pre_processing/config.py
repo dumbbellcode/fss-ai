@@ -9,11 +9,16 @@ class PreprocessingConfig:
 
     base_url: str = "https://openrouter.ai/api/v1"
     api_key_env: str = "OPENROUTER_API_KEY"
+    provider_order: tuple[str, ...] = ("coreweave",)
+    allow_provider_fallbacks: bool = False
+    require_provider_parameters: bool = False
     temperature: float = 0
-    amendment_parser_model: str = "google/gemini-2.5-flash-lite"
-    amendment_parser_max_tokens: int = 8_192
-    amendment_applier_model: str = "openai/gpt-4o-mini"
-    amendment_applier_max_tokens: int = 8_192
+    reasoning_effort: str = "low"
+    amendment_parser_model: str = "openai/gpt-oss-120b"
+    amendment_parser_max_tokens: int = 4_096
+    amendment_parser_chunk_tokens: int = 6_000
+    amendment_applier_model: str = "openai/gpt-oss-120b"
+    amendment_applier_max_tokens: int = 4_096
     max_amendment_workers: int = 7
 
 

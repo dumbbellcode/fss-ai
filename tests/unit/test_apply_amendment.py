@@ -173,18 +173,18 @@ def test_apply_amendments_writes_output(tmp_path):
     assert output.exists()
 
 
-def test_apply_amendments_applies_in_date_order(tmp_path):
-    amendment_a = tmp_path / "A.json"
-    amendment_b = tmp_path / "B.json"
+def test_apply_amendments_applies_in_descending_filename_number(tmp_path):
+    amendment_a = tmp_path / "01_newer.json"
+    amendment_b = tmp_path / "02_older.json"
     amendment_a.write_text(
         json.dumps(
-            {"date": "2020-01-01", "changes": [{"regulation": "1.2", "subregulation": "1.2.1", "amendment_text": "first"}]}
+            {"date": "2025-01-01", "changes": [{"regulation": "1.2", "subregulation": "1.2.1", "amendment_text": "newer"}]}
         ),
         encoding="utf-8",
     )
     amendment_b.write_text(
         json.dumps(
-            {"date": "2025-01-01", "changes": [{"regulation": "1.2", "subregulation": "1.2.1", "amendment_text": "second"}]}
+            {"date": "2020-01-01", "changes": [{"regulation": "1.2", "subregulation": "1.2.1", "amendment_text": "older"}]}
         ),
         encoding="utf-8",
     )

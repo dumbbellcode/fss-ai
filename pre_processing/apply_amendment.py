@@ -201,6 +201,14 @@ def _build_llm(model: str, config: PreprocessingConfig) -> ChatOpenAI:
         api_key=os.environ[config.api_key_env],
         temperature=config.temperature,
         max_tokens=config.amendment_applier_max_tokens,
+        reasoning_effort=config.reasoning_effort,
+        extra_body={
+            "provider": {
+                "order": list(config.provider_order),
+                "allow_fallbacks": config.allow_provider_fallbacks,
+                "require_parameters": config.require_provider_parameters,
+            }
+        },
     )
 
 
@@ -262,8 +270,11 @@ def apply_amendment(
     return regulation
 
 
-def _amendment_date(path: Path) -> str:
-    return AmendmentList.model_validate_json(path.read_text(encoding="utf-8")).date
+def _amendment_number(path: Path) -> int:
+    match = re.match(r"^(\d+)(?:_|$)", path.name)
+    if not match:
+        raise ValueError(f"Amendment filename must start with a numeric prefix: {path.name}")
+    return int(match.group(1))
 
 
 def apply_amendments(
@@ -273,14 +284,16 @@ def apply_amendments(
     model: str | None = None,
     config: PreprocessingConfig = DEFAULT_CONFIG,
 ) -> Regulation:
-    """Apply a sequence of amendments onto a regulation, in date order.
+    """Apply amendments in descending numeric filename-prefix order.
 
-    Amendments are applied cumulatively, earliest date first. When
+    Amendment files are numbered newest-first by the source directory, so the
+    numeric filename prefix is sorted descending to apply older changes first.
+    When
     ``output_json_path`` is given the final regulation is written there; the
     resulting ``Regulation`` is always returned.
     """
     regulation = Regulation.model_validate_json(Path(regulation_json_path).read_text(encoding="utf-8"))
-    ordered = sorted((Path(path) for path in amendment_json_paths), key=_amendment_date)
+    ordered = sorted((Path(path) for path in amendment_json_paths), key=_amendment_number, reverse=True)
     llm = _build_llm(model or config.amendment_applier_model, config)
 
     for amendment_path in ordered:

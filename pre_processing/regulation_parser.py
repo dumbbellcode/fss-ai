@@ -63,9 +63,9 @@ class Regulation(BaseModel):
 
 ItemType = Literal["chapter", "section", "subsection", "schedule", "annexure", "form"]
 
-CHAPTER_RE = re.compile(r"^CHAPTER\s*-?\s*(\d+)\s*$", re.IGNORECASE)
+CHAPTER_RE = re.compile(r"^CHAPTER\s*-?\s*(\d+)\s*:?\s*$", re.IGNORECASE)
 SUBSECTION_RE = re.compile(r"^(\d+)\s*\.\s*(\d+)\s*\.\s*(\d+)\b")
-SECTION_RE = re.compile(r"^(\d+)\s*\.\s*(\d+)\s*(?::|\s|$)")
+SECTION_RE = re.compile(r"^(\d+)\s*\.\s*(\d+)\s*(?:[:.]|\s|$)")
 SCHEDULE_RE = re.compile(r"^SCHEDULE\s*-?\s*([0-9]+|[IVXLCDM]+)\s*$", re.IGNORECASE)
 ANNEXURE_RE = re.compile(r"^ANNEXURE\s*-?\s*(.+?)\s*$", re.IGNORECASE)
 QUOTE_CHARS = "'\"‘’“”"

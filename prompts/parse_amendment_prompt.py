@@ -30,7 +30,10 @@ You have to write that date in 'YYYY-MM-DD' format.
 
 You will find all the changes in numbered bullet points.
 Each array item should either be amendment for a subregulation or  a schedule or a form. Copy the amendment_text as it is from the text. 
-amendment_text should contain full text: "For regulation ..., subregulation ..., ... should be substituted by"
+amendment_text must contain the complete amendment instruction verbatim, starting with its
+original lead-in (for example, "in Schedule ..." or "in regulation ..."). Do not summarize,
+rewrite, normalize, or remove the lead-in; copy the source wording through the substituted or
+inserted text.
 
 Rules to disambiguate the target of each change:
 1. Check for "Schedule" FIRST. If the text mentions "Schedule <N>", set the schedule field to N and leave
@@ -41,4 +44,6 @@ Rules to disambiguate the target of each change:
 3. Only set regulation and subregulation when the text explicitly says "in regulation <X.Y>,
    in sub-regulation <X.Y.Z>".
 4. Each change must populate exactly one target: (regulation + subregulation), schedule (+ annexure/form), or form.
+5. Every change object must include all six fields: regulation, subregulation, schedule, annexure, form, and amendment_text.
+   Use null for target fields that do not apply; do not omit any field.
 """

@@ -22,7 +22,7 @@ from pre_processing.regulation_parser import parse_regulation
 from pre_processing.config import DEFAULT_CONFIG, PreprocessingConfig
 from ingestion.config import DEFAULT_CONFIG as DEFAULT_INGESTION_CONFIG, IngestionConfig
 from ingestion.persist_embeddings import ingest_regulation
-from utils.pdf_to_md import ConversionMethod, convert_pdf
+from utils.pdf_to_md import ConversionMethod, convert_pdf, is_pdf
 
 SAMPLE_DIRECTORIES = [
     PROJECT_ROOT / "assets/regulations/02_Food_Products_Standards_and_Food_Additives",
@@ -125,14 +125,24 @@ def build_stages(
 
 
 def discover_items(directory: Path) -> list[Item]:
-    items = [
-        Item(kind="regulation", base_stem=pdf.stem, root=directory)
-        for pdf in sorted((directory / "original").glob("*.pdf"))
-    ]
-    items += [
-        Item(kind="amendment", base_stem=pdf.stem, root=directory, sub="amendments")
-        for pdf in sorted((directory / "original" / "amendments").glob("*.pdf"))
-    ]
+    regulations = []
+    for pdf in sorted((directory / "original").glob("*.pdf")):
+        if not is_pdf(pdf):
+            print(
+                f"Warning: skipping {pdf.resolve().relative_to(PROJECT_ROOT)} (not a valid PDF)",
+                file=sys.stderr,
+            )
+            continue
+        regulations.append(Item(kind="regulation", base_stem=pdf.stem, root=directory))
+    items: list[Item] = regulations
+    for pdf in sorted((directory / "original" / "amendments").glob("*.pdf")):
+        if not is_pdf(pdf):
+            print(
+                f"Warning: skipping {pdf.resolve().relative_to(PROJECT_ROOT)} (not a valid PDF)",
+                file=sys.stderr,
+            )
+            continue
+        items.append(Item(kind="amendment", base_stem=pdf.stem, root=directory, sub="amendments"))
     return items
 
 
@@ -158,10 +168,13 @@ def main() -> None:
         default="docling",
         help="PDF conversion method (default: docling)",
     )
-    parser.add_argument(
-        "--stages",
-        default=None,
+    parser.add_argument("--stages", default=None,
         help=f"Comma-separated subset of stages to run ({', '.join(ALL_STAGE_NAMES)}). Default: all.",
+    )
+    parser.add_argument(
+        "--dirs",
+        default=None,
+        help="Comma-separated regulation directory names (e.g. '03,04,10') or paths. Default: SAMPLE_DIRECTORIES.",
     )
     parser.add_argument("--force", action="store_true", help="Re-run stages even when outputs are up to date.")
     args = parser.parse_args()
@@ -169,7 +182,25 @@ def main() -> None:
     selected = parse_stages(args.stages)
     stages = build_stages(args.method)
 
-    for directory in SAMPLE_DIRECTORIES:
+    directories = []
+    if args.dirs:
+        for name in args.dirs.split(","):
+            name = name.strip()
+            if not name:
+                continue
+            path = Path(name)
+            if not path.is_absolute():
+                candidate = PROJECT_ROOT / "assets/regulations" / name
+                if not candidate.is_dir():
+                    raise SystemExit(f"Directory not found: {candidate}")
+                path = candidate
+            if not path.is_dir():
+                raise SystemExit(f"Directory not found: {path}")
+            directories.append(path)
+    else:
+        directories = SAMPLE_DIRECTORIES
+
+    for directory in directories:
         manifest = Manifest(directory / "manifest.json")
         results = run_pipeline(discover_items(directory), stages, manifest, selected=selected, force=args.force)
         for result in results:

@@ -10,6 +10,19 @@ ConversionMethod = Literal["pymupdf", "markitdown", "docling"]
 DEFAULT_METHOD: ConversionMethod = "docling"
 
 
+def is_pdf(path: Path) -> bool:
+    """Return True if the file starts with PDF magic bytes.
+
+    Some sources save HTML documents with a ``.pdf`` extension; those cannot
+    be processed by PDF conversion engines and should be skipped by callers.
+    """
+    try:
+        with path.open("rb") as fh:
+            return fh.read(5) == b"%PDF-"
+    except OSError:
+        return False
+
+
 def _convert_with_docling(pdf_path: Path) -> str:
     from docling.datamodel.base_models import InputFormat
     from docling.datamodel.pipeline_options import PdfPipelineOptions

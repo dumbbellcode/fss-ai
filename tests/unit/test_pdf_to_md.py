@@ -1,11 +1,22 @@
 import pytest
 from unittest.mock import patch
 
-from utils.pdf_to_md import DEFAULT_METHOD, convert_pdf
+from utils.pdf_to_md import DEFAULT_METHOD, convert_pdf, is_pdf
 
 
 def test_default_conversion_method_is_docling():
     assert DEFAULT_METHOD == "docling"
+
+
+def test_is_pdf_checks_magic_bytes(tmp_path):
+    real = tmp_path / "real.pdf"
+    real.write_bytes(b"%PDF-1.7\nfake")
+    html = tmp_path / "fake.pdf"
+    html.write_bytes(b"<!DOCTYPE html><html>not a pdf</html>")
+
+    assert is_pdf(real) is True
+    assert is_pdf(html) is False
+    assert is_pdf(tmp_path / "missing.pdf") is False
 
 
 def test_convert_pdf_dispatches_to_docling_by_default(tmp_path):

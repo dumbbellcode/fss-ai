@@ -14,9 +14,10 @@ class PreprocessingConfig:
     require_provider_parameters: bool = False
     temperature: float = 0
     reasoning_effort: str = "low"
+    amendment_parser_reasoning_effort: str | None = None
     amendment_parser_model: str = "openai/gpt-oss-120b"
-    amendment_parser_max_tokens: int = 4_096
-    amendment_parser_chunk_tokens: int = 6_000
+    amendment_parser_max_tokens: int = 8_192
+    amendment_parser_chunk_tokens: int = 30_000
     amendment_applier_model: str = "openai/gpt-oss-120b"
     amendment_applier_max_tokens: int = 4_096
     max_amendment_workers: int = 7

@@ -2,10 +2,13 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import tiktoken
+
 from pre_processing.amendment_parser import (
     AmendmentItem,
     AmendmentList,
     _restore_truncated_text,
+    _split_amendment_document,
     parse_amendment,
 )
 from pre_processing.config import PreprocessingConfig
@@ -107,3 +110,35 @@ def test_restore_truncated_amendment_text_from_source_block():
 
     assert "Virgin olive oil" in change.amendment_text
     assert "…" not in change.amendment_text
+
+def test_split_amendment_document_packs_multiple_markers():
+    encoding = tiktoken.get_encoding("cl100k_base")
+    prefix = "NOTIFICATION\nNew Delhi, the 1st January, 2025\n"
+    blocks = [
+        "(1) in regulation 1.1, the word “old” shall be omitted;\n",
+        "(2) in regulation 1.2, the word “older” shall be omitted;\n",
+        "(3) in regulation 1.3, the word “oldest” shall be omitted;\n",
+    ]
+    document = prefix + "".join(blocks)
+    max_tokens = len(encoding.encode(prefix + blocks[0] + blocks[1]))
+
+    chunks = _split_amendment_document(document, max_tokens)
+
+    assert chunks == [prefix + blocks[0] + blocks[1], prefix + blocks[2]]
+
+def test_split_amendment_document_keeps_large_budget_in_one_chunk():
+    prefix = "NOTIFICATION\nNew Delhi, the 1st January, 2025\n"
+    document = prefix + (
+        "(1) in regulation 1.1, the word “old” shall be omitted;\n"
+        "(2) in regulation 1.2, the word “older” shall be omitted;\n"
+    )
+
+    assert _split_amendment_document(document, 30_000) == [document]
+
+def test_parse_amendment_omits_reasoning_effort_by_default(tmp_path):
+    output = tmp_path / "amendment.json"
+    result = AmendmentList(date="2026-06-23", changes=[])
+    with patch("pre_processing.amendment_parser.ChatOpenAI", return_value=_fake_llm(result)) as chat:
+        parse_amendment(SAMPLE_MD, output)
+
+    assert "reasoning_effort" not in chat.call_args.kwargs

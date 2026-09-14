@@ -42,17 +42,32 @@ _encoding = tiktoken.get_encoding("cl100k_base")
 
 
 def _split_amendment_document(document: str, max_tokens: int) -> list[str]:
-    """Split long notifications into independently parseable top-level blocks."""
+    """Group top-level amendment blocks into chunks under ``max_tokens``."""
     if len(_encoding.encode(document)) <= max_tokens:
         return [document]
     matches = list(_AMENDMENT_MARKER_RE.finditer(document))
     if not matches:
         return [document]
     prefix = document[: matches[0].start()]
-    return [
-        prefix + document[match.start() : next_match.start() if next_match else len(document)]
+    prefix_tokens = len(_encoding.encode(prefix))
+    raw_blocks = [
+        document[match.start() : next_match.start() if next_match else len(document)]
         for match, next_match in zip(matches, [*matches[1:], None])
     ]
+    block_tokens = [len(_encoding.encode(block)) for block in raw_blocks]
+    chunks: list[str] = []
+    current: list[str] = []
+    current_tokens = prefix_tokens
+    for block, tokens in zip(raw_blocks, block_tokens):
+        if current and current_tokens + tokens > max_tokens:
+            chunks.append(prefix + "".join(current))
+            current = []
+            current_tokens = prefix_tokens
+        current.append(block)
+        current_tokens += tokens
+    if current:
+        chunks.append(prefix + "".join(current))
+    return chunks or [document]
 
 
 def _source_amendment_blocks(document: str) -> list[str]:
@@ -126,21 +141,23 @@ def parse_amendment(
     """
     output_path = Path(output_json_path) if output_json_path else Path(md_path).with_suffix(".json")
     document = Path(md_path).read_text(encoding="utf-8")
-    llm = ChatOpenAI(
-        model=model or config.amendment_parser_model,
-        base_url=config.base_url,
-        api_key=os.environ[config.api_key_env],
-        temperature=config.temperature,
-        max_tokens=config.amendment_parser_max_tokens,
-        reasoning_effort=config.reasoning_effort,
-        extra_body={
+    llm_kwargs: dict = {
+        "model": model or config.amendment_parser_model,
+        "base_url": config.base_url,
+        "api_key": os.environ[config.api_key_env],
+        "temperature": config.temperature,
+        "max_tokens": config.amendment_parser_max_tokens,
+        "extra_body": {
             "provider": {
                 "order": list(config.provider_order),
                 "allow_fallbacks": config.allow_provider_fallbacks,
                 "require_parameters": config.require_provider_parameters,
             }
         },
-    ).with_structured_output(AmendmentList)
+    }
+    if config.amendment_parser_reasoning_effort is not None:
+        llm_kwargs["reasoning_effort"] = config.amendment_parser_reasoning_effort
+    llm = ChatOpenAI(**llm_kwargs).with_structured_output(AmendmentList)
 
     parsed_documents = _split_amendment_document(
         document,

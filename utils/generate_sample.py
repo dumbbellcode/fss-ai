@@ -154,9 +154,9 @@ def main() -> None:
     )
     parser.add_argument(
         "--method",
-        choices=("markitdown", "pymupdf"),
-        default="markitdown",
-        help="PDF conversion method (default: markitdown)",
+        choices=("docling", "markitdown", "pymupdf"),
+        default="docling",
+        help="PDF conversion method (default: docling)",
     )
     parser.add_argument(
         "--stages",

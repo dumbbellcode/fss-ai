@@ -37,6 +37,47 @@ def cleanup_regulation(md_path: str | Path, output_md_path: str | Path) -> None:
     output_path.write_text(f"{text}\n", encoding="utf-8")
 
 
+def _notification_header_index(lines: list[str], normalized) -> int | None:
+    """Find the line where the notification begins.
+
+    Matches the notification header in its known shapes, ignoring leading
+    markdown heading markers (``#``/``##``) and stray whitespace:
+
+    1. ``FOOD SAFETY AND STANDARDS AUTHORITY OF INDIA NOTIFICATION`` on one line
+       (date line such as ``New Delhi, the 29 th December, 2020`` follows). The
+       authority may be wrapped in parentheses, e.g. ``(Food Safety and
+       Standards Authority of India) NOTIFICATION``.
+    2. ``FOOD SAFETY AND STANDARDS AUTHORITY OF INDIA`` directly followed by a
+       ``NOTIFICATION`` line.
+    3. A ``NOTIFICATION`` line alone followed by a date line such as
+       ``New Delhi, the 4 th November, 2015`` (no authority heading, e.g. when
+       the ministry heading sits above it).
+    """
+    heading = r"(?:#{1,6}\s*)?"
+    authority_body = r"\(?\s*FOOD SAFETY AND STANDARDS AUTHORITY OF INDIA\s*\)?"
+    same_line = re.compile(rf"^{heading}{authority_body}\s+NOTIFICATION$", re.IGNORECASE)
+    # Two-line header only for the plain (un-parenthesized) authority heading.
+    authority = re.compile(rf"^{heading}FOOD SAFETY AND STANDARDS AUTHORITY OF INDIA$", re.IGNORECASE)
+    notification = re.compile(rf"^{heading}NOTIFICATION$", re.IGNORECASE)
+    new_delhi = re.compile(r"^New Delhi,\s+the\s+.+$", re.IGNORECASE)
+
+    for index, line in enumerate(lines):
+        text = normalized(line)
+        if same_line.match(text):
+            return index
+        if notification.match(text) and any(
+            new_delhi.match(normalized(following)) for following in lines[index + 1 : index + 3]
+        ):
+            return index
+        if authority.match(text):
+            next_index = index + 1
+            while next_index < len(lines) and not normalized(lines[next_index]):
+                next_index += 1
+            if next_index < len(lines) and notification.match(normalized(lines[next_index])):
+                return index
+    return None
+
+
 def cleanup_amendment(md_path: str | Path, output_md_path: str | Path) -> None:
     """Clean an amendment Markdown file and write the result to another file."""
     input_path = Path(md_path)
@@ -46,35 +87,7 @@ def cleanup_amendment(md_path: str | Path, output_md_path: str | Path) -> None:
     def normalized(line: str) -> str:
         return re.sub(r"\s+", " ", line).strip()
 
-    notification_index = next(
-        (
-            index
-            for index, line in enumerate(lines)
-            if normalized(line).upper() == "NOTIFICATION"
-            and any(
-                re.match(r"^New Delhi,\s+the\s+.+$", normalized(next_line), re.IGNORECASE)
-                for next_line in lines[index + 1 : index + 3]
-            )
-        ),
-        None,
-    )
-    def _next_content_index(start: int) -> int:
-        index = start
-        while index < len(lines) and not normalized(lines[index]):
-            index += 1
-        return index
-
-    if notification_index is None:
-        notification_index = next(
-            (
-                index
-                for index, line in enumerate(lines)
-                if normalized(line).upper() == "FOOD SAFETY AND STANDARDS AUTHORITY OF INDIA"
-                and _next_content_index(index + 1) < len(lines)
-                and normalized(lines[_next_content_index(index + 1)]).upper() == "NOTIFICATION"
-            ),
-            None,
-        )
+    notification_index = _notification_header_index(lines, normalized)
     if notification_index is not None:
         lines = lines[notification_index:]
 

@@ -35,26 +35,55 @@ DEFAULT_MODEL = DEFAULT_CONFIG.amendment_parser_model
 
 load_dotenv()
 
-_AMENDMENT_MARKER_RE = re.compile(
-    r"(?m)^[ \t]*(?:\(\d+\)|\([a-z]\))[ \t]+(?=(?:in|In)\b)"
-)
 _encoding = tiktoken.get_encoding("cl100k_base")
+
+# Breakpoints are the starts of complete amendment blocks only: top-level
+# clause headers ("2. In the Food Safety and Standards ...", "1. Short title...")
+# and change items ("(1) in regulation ...", "- (a) in ..."). A block is never
+# split, so each amendment's text stays in one chunk.
+_TOP_LEVEL_MARKER_RE = re.compile(
+    r"(?m)^[ \t]*\d+\.\s+(?:In\s+the\s+Food\s+Safety|Short\s+title|\(\d+\)\s+These\s+regulations|\([A-Z]\)\s+(?:for|in)|These\s+regulations)",
+    re.IGNORECASE,
+)
+_CHANGE_ITEM_MARKER_RE = re.compile(r"(?m)^[ \t]*-?[ \t]*(?:\(\d+\)|\([a-z]\))[ \t]+(?=(?:in|In)\b)")
+
+_SEMANTIC_MARKERS: list[re.Pattern] = [
+    _TOP_LEVEL_MARKER_RE,
+    _CHANGE_ITEM_MARKER_RE,
+]
+
+
+def _marker_spans(document: str, patterns: list[re.Pattern]) -> list[tuple[int, int]]:
+    """Return (start, end) of every marker match, in document order."""
+    spans: list[tuple[int, int]] = []
+    for pattern in patterns:
+        spans.extend((match.start(), match.end()) for match in pattern.finditer(document))
+    spans.sort(key=lambda pair: pair[0])
+    return spans
 
 
 def _split_amendment_document(document: str, max_tokens: int) -> list[str]:
-    """Group top-level amendment blocks into chunks under ``max_tokens``."""
+    """Group complete amendment blocks into chunks under ``max_tokens``.
+
+    Splits only at amendment-block boundaries, so one amendment's text never
+    spans two chunks. The notification prefix is repeated in every chunk so each
+    piece is self-contained. A single block larger than ``max_tokens`` keeps its
+    own chunk intact rather than being cut mid-amendment.
+    """
     if len(_encoding.encode(document)) <= max_tokens:
         return [document]
-    matches = list(_AMENDMENT_MARKER_RE.finditer(document))
-    if not matches:
+    spans = _marker_spans(document, _SEMANTIC_MARKERS)
+    if not spans:
         return [document]
-    prefix = document[: matches[0].start()]
+
+    prefix = document[: spans[0][0]]
     prefix_tokens = len(_encoding.encode(prefix))
     raw_blocks = [
-        document[match.start() : next_match.start() if next_match else len(document)]
-        for match, next_match in zip(matches, [*matches[1:], None])
+        document[spans[i][0] : spans[i + 1][0] if i + 1 < len(spans) else len(document)]
+        for i in range(len(spans))
     ]
     block_tokens = [len(_encoding.encode(block)) for block in raw_blocks]
+
     chunks: list[str] = []
     current: list[str] = []
     current_tokens = prefix_tokens
@@ -71,11 +100,13 @@ def _split_amendment_document(document: str, max_tokens: int) -> list[str]:
 
 
 def _source_amendment_blocks(document: str) -> list[str]:
-    """Split a notification into source blocks at top-level amendment markers."""
-    matches = list(_AMENDMENT_MARKER_RE.finditer(document))
+    """Split a notification into source blocks at amendment markers."""
+    spans = _marker_spans(document, _SEMANTIC_MARKERS)
+    if not spans:
+        return [document.strip()] if document.strip() else []
     return [
-        document[match.start() : next_match.start() if next_match else len(document)].strip()
-        for match, next_match in zip(matches, [*matches[1:], None])
+        document[spans[i][0] : spans[i + 1][0] if i + 1 < len(spans) else len(document)].strip()
+        for i in range(len(spans))
     ]
 
 

@@ -1,0 +1,8 @@
+# FSSAI RAG chat service (Cloud Run)
+langchain-openai>=1.6.0
+langchain-core>=1.3.18
+qdrant-client>=1.10.0
+fastapi>=0.115.0
+uvicorn>=0.30.0
+python-dotenv>=1.0.0
+pydantic>=2.10.0

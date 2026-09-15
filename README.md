@@ -116,7 +116,55 @@ uv run python -m retrieval.retrieve \
 ```
 
 The Python API returns `RetrievedChunk` objects containing `text`, `metadata`,
-and Chroma's `distance` score. Lower distance means greater similarity.
+and the similarity `distance`. Lower distance means greater similarity.
+
+Retrieval supports two vector-store backends. Chroma (local, default) is used
+for dev/tests/evals; Qdrant Cloud powers the hosted chat product:
+
+```bash
+uv run python -m retrieval.retrieve \
+  "What are the requirements for registering a petty food business?" \
+  --backend qdrant --qdrant-url <url> --qdrant-api-key <key> --top-k 5
+```
+
+### Chat
+
+`retrieval/chat.py` provides a minimal chat abstraction over retrieval:
+
+```python
+from retrieval.chat import ChatSession
+
+session = ChatSession(backend="qdrant", qdrant_url="...", qdrant_api_key="...")
+answer = session.respond("What is a food business operator?")
+# evidence used for the last answer:
+print(session.last_chunks)
+```
+
+- `ChatSession.respond(message)` keeps conversation history and returns an
+  answer grounded in the retrieved passages (default chat model:
+  `deepseek/deepseek-v4-flash` via OpenRouter).
+- `respond(message, history)` is a stateless handler matching Gradio's
+  `gr.ChatInterface` signature.
+- `python -m retrieval.chat` runs an interactive REPL loop.
+
+Before chatting against Qdrant, export the local Chroma store:
+
+```bash
+uv run python -m retrieval.sync_to_qdrant \
+  --qdrant-url <url> --qdrant-api-key <key>
+```
+
+### Hosting the chat product
+
+`app.py` is a small FastAPI service that serves `static/index.html` and
+`POST /api/chat`. It runs on Cloud Run for ~$0/month at demo scale:
+
+```bash
+gcloud run deploy fssai-chat --source . \
+  --set-env-vars OPENROUTER_API_KEY=...,QDRANT_URL=...,QDRANT_API_KEY=...
+```
+
+See `app.py` docstring for the full list of environment variables.
 
 Integration tests that call the real LLM (accuracy checks) run with:
 
@@ -132,5 +180,6 @@ uv run pytest -m integration -s
 ## Roadmap
 
 - [x] Index parsed regulations for retrieval
-- [ ] Add a query/answer interface
+- [x] Add a query/answer chat interface (FastAPI + hosted chat)
+- [x] Host the chat on Cloud Run with a Qdrant-backed store
 - [ ] Expand coverage to all FSSAI regulations

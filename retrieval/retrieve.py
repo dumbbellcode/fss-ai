@@ -59,8 +59,6 @@ def retrieve(
         RetrievedChunk(text=hit.text, metadata=hit.metadata, distance=hit.distance)
         for hit in hits
     ]
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(description="Retrieve regulation chunks for a question.")
     parser.add_argument("question")

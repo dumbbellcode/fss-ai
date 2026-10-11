@@ -1,6 +1,6 @@
 from unittest.mock import Mock, patch
 
-from evals.metrics import calculate_context_metrics
+from evals.context_metrics import calculate_context_metrics
 
 
 def test_calculate_context_metrics_builds_deepeval_case():
@@ -9,8 +9,8 @@ def test_calculate_context_metrics_builds_deepeval_case():
     precision_cls = Mock(return_value=precision)
     recall_cls = Mock(return_value=recall)
 
-    with patch("evals.metrics.ContextualPrecisionMetric", precision_cls), patch(
-        "evals.metrics.ContextualRecallMetric", recall_cls
+    with patch("evals.context_metrics.ContextualPrecisionMetric", precision_cls), patch(
+        "evals.context_metrics.ContextualRecallMetric", recall_cls
     ):
         result = calculate_context_metrics(
             "What is required?",

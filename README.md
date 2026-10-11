@@ -72,7 +72,6 @@ flowchart TD
         Chroma["Chroma DB (db/)"] -->|retrieve()| Query
         FastAPI["FastAPI (app.py)"] -->|/api/chat| UI
         UI["static/index.html"] -->|fetch /api/chat| Browser
-        OpenRouter["OpenRouter API"] -->|LLM| All pipeline stages
     end
 ```
 
@@ -82,12 +81,11 @@ flowchart TD
 flowchart TD
     subgraph Prod ["Production (Cloud Run)"]
         direction TB
-        Qdrant["Qdrant Cloud"] -->|retrieve()| Query
-        FastAPI["FastAPI (app.py)"] -->|/api/chat| API Gateway
+        Qdrant["Qdrant Cloud"] -->|retrieve()| Retrieve
+        FastAPI["FastAPI (app.py)"] -->|/api/chat| API_GW
         CloudRun["Cloud Run service"] -->|runs fssai-chat| User
         Static["Static hosting (S3/CloudFront)"]
             -->|HTML/JS| Browser
-        OpenRouter["OpenRouter API"] -->|LLM| Chat endpoint
     end
 ```
 
@@ -101,7 +99,7 @@ Same pipeline: PDF → cleaned markdown → parsed JSON → `post_amendment` →
 |---|---|---|
 | Vector store | Chroma (ephemeral `db/`) | Qdrant Cloud (managed, persistent) |
 | Chat server | `uvicorn app:app` locally | Cloud Run (auto-scaling, ~$0/mo demo) |
-| Frontend | `static/index.html` opened locally, or via FastAPI `/static` | Hosted static site (S3/CloudFront/Cloudflare Pages) |
+| Frontend | `static/index.html` served by FastAPI or static host | Hosted static site (S3/CloudFront/Cloudflare Pages) |
 | API endpoint | `localhost:8000/api/chat` | Custom domain / API Gateway + Cloud Run |
 | Qdrant URL/Key | Not required | Set `QDRANT_URL` / `QDRANT_API_KEY` env vars |
 

@@ -56,6 +56,55 @@ uv run python utils/generate_sample.py --stages clean,parse   # run a subset
 uv run python utils/generate_sample.py --force            # ignore incremental cache
 ```
 
+## Architecture
+
+### Local development
+
+```mermaid
+flowchart TD
+    subgraph Local ["Local Development"]
+        direction TB
+        PDFs["FSSAI PDFs"] -->|download_regulations.py| Fetch
+        Convert["PDF → Markdown"] -->|pre_processing| Cleaned
+        Cleaned["*.cleaned.md"] -->|pre_processing| Parse
+        Parse["Structured JSON"] -->|apply_amendment| final.json
+        final["post_amendment/Regulation.final.json"] -->|ingestion| Chroma
+        Chroma["Chroma DB (db/)"] -->|retrieve()| Query
+        FastAPI["FastAPI (app.py)"] -->|/api/chat| UI
+        UI["static/index.html"] -->|fetch /api/chat| Browser
+        OpenRouter["OpenRouter API"] -->|LLM| All pipeline stages
+    end
+```
+
+### Production / Cloud Run
+
+```mermaid
+flowchart TD
+    subgraph Prod ["Production (Cloud Run)"]
+        direction TB
+        Qdrant["Qdrant Cloud"] -->|retrieve()| Query
+        FastAPI["FastAPI (app.py)"] -->|/api/chat| API Gateway
+        CloudRun["Cloud Run service"] -->|runs fssai-chat| User
+        Static["Static hosting (S3/CloudFront)"]
+            -->|HTML/JS| Browser
+        OpenRouter["OpenRouter API"] -->|LLM| Chat endpoint
+    end
+```
+
+### Data ingest path (both environments)
+Same pipeline: PDF → cleaned markdown → parsed JSON → `post_amendment` → chunk/embed → vector store.
+- **Local:** Chroma persists under `db/`
+- **Production:** Chroma → Qdrant Cloud via `retrieval/sync_to_qdrant.py` then `app.py` defaults to Qdrant
+
+### Key differences
+| Aspect | Local | Production |
+|---|---|---|
+| Vector store | Chroma (ephemeral `db/`) | Qdrant Cloud (managed, persistent) |
+| Chat server | `uvicorn app:app` locally | Cloud Run (auto-scaling, ~$0/mo demo) |
+| Frontend | `static/index.html` opened locally, or via FastAPI `/static` | Hosted static site (S3/CloudFront/Cloudflare Pages) |
+| API endpoint | `localhost:8000/api/chat` | Custom domain / API Gateway + Cloud Run |
+| Qdrant URL/Key | Not required | Set `QDRANT_URL` / `QDRANT_API_KEY` env vars |
+
 The pipeline is incremental: each stage is skipped when its output already exists
 and the source is unchanged, tracked in `<directory>/manifest.json`. Stages are
 `convert` (PDF → `.converted.md`), `clean` (`.converted.md` → `.cleaned.md`),

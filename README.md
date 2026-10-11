@@ -69,7 +69,7 @@ flowchart TD
         Cleaned["*.cleaned.md"] -->|pre_processing| Parse
         Parse["Structured JSON"] -->|apply_amendment| final.json
         final["post_amendment/Regulation.final.json"] -->|ingestion| ChromaDB
-        ChromaDB["Chroma DB (db/)"] -->|retrieve()| Query
+        ChromaDB["Chroma DB db"] -->|retrieve| Query
         FastAPI["FastAPI (app.py)"] -->|/api/chat| UI
         UI["static/index.html"] -->|fetch /api/chat| Browser
     end
@@ -81,7 +81,7 @@ flowchart TD
 flowchart TD
     subgraph Prod ["Production (Cloud Run)"]
         direction TB
-        Qdrant["Qdrant Cloud"] -->|retrieve()| Retrieve
+        Qdrant["Qdrant Cloud"] -->|retrieve| Retrieve
         FastAPI["FastAPI (app.py)"] -->|/api/chat| API_GW
         CloudRun["Cloud Run service"] -->|runs fssai-chat| User
         Static["Static hosting (S3/CloudFront)"]

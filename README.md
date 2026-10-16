@@ -102,3 +102,21 @@ Same pipeline: PDF → cleaned markdown → parsed JSON → `post_amendment` →
 | Frontend | `static/index.html` served by FastAPI or static host | Hosted static site (S3/CloudFront/Cloudflare Pages) |
 | API endpoint | `localhost:8000/api/chat` | Custom domain / API Gateway + Cloud Run |
 | Qdrant URL/Key | Not required | Set `QDRANT_URL` / `QDRANT_API_KEY` env vars |
+
+## RAG Pipeline
+
+How a user question flows through the system, from retrieval to answer generation:
+
+```mermaid
+flowchart TD
+    subgraph RAG ["RAG Pipeline"]
+        direction TB
+        Q["User Question"] --> E["Embed Question\n(text-embedding-3-large, OpenRouter)"]
+        E --> S["Similarity Search\n(Chroma / Qdrant)"]
+        S --> T["Top-k Retrieval\n(k=5 default)"]
+        T --> R["Cross-Encoder Rerank\n(optional, cross-encoder/ms-marco)"]
+        R --> L["LLM Generator\n(deepseek/deepseek-v4-flash, OpenRouter)"]
+        L --> A["Answer + Source Citations"]
+        A -->|returns to| UI["Chat UI (localhost:8000)"]
+    end
+```

@@ -202,11 +202,25 @@ def main() -> None:
 
     for directory in directories:
         manifest = Manifest(directory / "manifest.json")
-        results = run_pipeline(discover_items(directory), stages, manifest, selected=selected, force=args.force)
+        results = run_pipeline(
+            discover_items(directory),
+            stages,
+            manifest,
+            selected=selected,
+            force=args.force,
+            continue_on_error=True,
+        )
+        failures = [result for result in results if result.error]
         for result in results:
-            verb = "Skipped (up to date)" if result.skipped else f"Ran {result.stage}"
-            print(f"  {verb}: {result.path}")
+            if result.error:
+                print(f"  FAILED {result.stage}: {result.path}")
+                print(f"    {result.error}")
+            else:
+                verb = "Skipped (up to date)" if result.skipped else f"Ran {result.stage}"
+                print(f"  {verb}: {result.path}")
         print(f"Manifest: {manifest.path}")
+        if failures:
+            print(f"{len(failures)} item(s) failed in {directory.name}; re-run to retry them.")
 
 
 if __name__ == "__main__":

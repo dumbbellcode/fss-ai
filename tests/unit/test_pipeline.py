@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from pre_processing.pipeline import Item, Manifest, Stage, run_pipeline
 
 
@@ -160,6 +162,45 @@ def test_kind_selector_skips_unknown_kind(tmp_path):
     stages = [Stage("convert", "original", ".pdf", "converted", ".md", {"other": lambda s, d: _write(d, "x")})]
     results = run_pipeline([item], stages, _manifest(tmp_path))
     assert results == []
+
+
+def test_continue_on_error_records_failure_and_runs_rest(tmp_path):
+    items = [
+        Item(kind="doc", base_stem="bad", root=tmp_path),
+        Item(kind="doc", base_stem="good", root=tmp_path),
+    ]
+    for item in items:
+        _write(tmp_path / "original" / f"{item.base_stem}.pdf", "pdf")
+
+    def _process(src: Path, dst: Path) -> None:
+        if src.stem == "bad":
+            raise RuntimeError("kaboom")
+        _write(dst, "ok")
+
+    stages = [Stage("convert", "original", ".pdf", "converted", ".md", {"doc": _process})]
+
+    manifest = _manifest(tmp_path)
+    results = run_pipeline(items, stages, manifest, continue_on_error=True)
+
+    assert [r.path.name for r in results] == ["bad.md", "good.md"]
+    assert results[0].error is not None and "kaboom" in results[0].error
+    assert results[1].error is None
+    assert (tmp_path / "converted" / "good.md").exists()
+    assert not (tmp_path / "converted" / "bad.md").exists()
+    # The failed item is not recorded, so a later run retries it.
+    assert not manifest.is_current(tmp_path / "converted" / "bad.md", tmp_path / "original" / "bad.pdf")
+
+
+def test_continue_on_error_false_raises(tmp_path):
+    _write(tmp_path / "original" / "reg.pdf", "pdf")
+
+    def _process(src: Path, dst: Path) -> None:
+        raise RuntimeError("kaboom")
+
+    stages = [Stage("convert", "original", ".pdf", "converted", ".md", {"doc": _process})]
+
+    with pytest.raises(RuntimeError, match="kaboom"):
+        run_pipeline([Item(kind="doc", base_stem="reg", root=tmp_path)], stages, _manifest(tmp_path))
 
 
 def test_dependency_change_triggers_rerun(tmp_path):

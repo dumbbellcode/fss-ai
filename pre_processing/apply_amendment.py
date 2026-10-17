@@ -16,6 +16,7 @@ from langchain_openai import ChatOpenAI
 from pre_processing.amendment_parser import AmendmentItem, AmendmentList
 from pre_processing.config import DEFAULT_CONFIG, PreprocessingConfig
 from pre_processing.regulation_parser import Regulation, Schedule, Subsection
+from pre_processing.retry import invoke_with_retry
 
 APPLY_AMENDMENT_PROMPT = """
 You are given the current text of a section of an Indian food safety regulation, along with an amendment
@@ -153,13 +154,24 @@ def _apply_schedule_amendment(current_text: str, amendment_text: str) -> str | N
     return current_text[: heading.start()] + updated_block + current_text[block_end:]
 
 
-def _llm_apply(llm, current_text: str, amendment_text: str, retries: int = 5) -> str:
+def _llm_apply(
+    llm,
+    current_text: str,
+    amendment_text: str,
+    retries: int = 5,
+    config: PreprocessingConfig = DEFAULT_CONFIG,
+) -> str:
     template = APPLY_AMENDMENT_PROMPT if current_text else INSERT_AMENDMENT_PROMPT
     prompt = template.format(current_text=current_text, amendment_text=amendment_text)
     # An update must return the whole section, so require a comparable length.
     min_len = max(10, int(len(current_text) * 0.3)) if current_text else 10
     for _ in range(retries):
-        result = llm.invoke([SystemMessage(content=prompt)])
+        result = invoke_with_retry(
+            llm,
+            [SystemMessage(content=prompt)],
+            max_retries=config.llm_max_retries,
+            base_delay=config.llm_retry_base_delay,
+        )
         text = (result.content or "").strip()
         for token in _GARBAGE_TOKENS:
             text = text.replace(token, "")
@@ -170,7 +182,7 @@ def _llm_apply(llm, current_text: str, amendment_text: str, retries: int = 5) ->
     return current_text
 
 
-def _process_group(llm, group: list) -> None:
+def _process_group(llm, group: list, config: PreprocessingConfig = DEFAULT_CONFIG) -> None:
     """Apply a group of changes targeting the same object, sequentially."""
     for change, target in group:
         started = time.perf_counter()
@@ -178,14 +190,16 @@ def _process_group(llm, group: list) -> None:
             item = target[1]
             if isinstance(item, Schedule):
                 patched = _apply_schedule_amendment(item.text or "", change.amendment_text)
-                item.text = patched if patched is not None else _llm_apply(llm, item.text or "", change.amendment_text)
+                item.text = patched if patched is not None else _llm_apply(
+                    llm, item.text or "", change.amendment_text, config=config
+                )
             else:
-                item.text = _llm_apply(llm, item.text or "", change.amendment_text)
+                item.text = _llm_apply(llm, item.text or "", change.amendment_text, config=config)
             label = getattr(item, "no", None) or getattr(item, "name", None) or "schedule"
             print(f"Updated: {label} ({time.perf_counter() - started:.1f}s)", flush=True)
         else:
             _, section, subregulation_no = target
-            new_text = _llm_apply(llm, "", change.amendment_text)
+            new_text = _llm_apply(llm, "", change.amendment_text, config=config)
             elapsed = time.perf_counter() - started
             if not new_text:
                 print(f"Skipped insert (empty LLM output): {subregulation_no} ({elapsed:.1f}s)", flush=True)
@@ -231,7 +245,7 @@ def apply_amendment_to_regulation(
         groups.setdefault(id(target[1]), []).append((change, target))
 
     with ThreadPoolExecutor(max_workers=config.max_amendment_workers) as executor:
-        futures = [executor.submit(_process_group, llm, group) for group in groups.values()]
+        futures = [executor.submit(_process_group, llm, group, config) for group in groups.values()]
         for future in futures:
             future.result()
     return regulation

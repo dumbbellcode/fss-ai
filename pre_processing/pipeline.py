@@ -63,6 +63,7 @@ class PipelineResult:
     stage: str
     path: Path
     skipped: bool
+    error: str | None = None
 
 
 class Manifest:
@@ -125,11 +126,16 @@ def run_pipeline(
     manifest: Manifest,
     selected: Sequence[str] | None = None,
     force: bool = False,
+    continue_on_error: bool = False,
 ) -> list[PipelineResult]:
     """Run ``items`` through ``stages``, skipping up-to-date outputs.
 
     ``selected`` restricts which stage names run; ``None`` means all stages.
     Returns one :class:`PipelineResult` per (item, stage) that applies.
+
+    When ``continue_on_error`` is True, a failing item is recorded with its error
+    message and the run proceeds to the remaining items (failures are reported in
+    the returned results). Progress already saved to the manifest is never lost.
     """
     selected = set(selected) if selected is not None else None
     results: list[PipelineResult] = []
@@ -148,7 +154,14 @@ def run_pipeline(
                 results.append(PipelineResult(stage.name, output, True))
                 continue
 
-            _processor(stage, item.kind)(source, output)
+            try:
+                _processor(stage, item.kind)(source, output)
+            except Exception as exc:  # noqa: BLE001 - surfaced in the result
+                if not continue_on_error:
+                    raise
+                results.append(PipelineResult(stage.name, output, False, f"{type(exc).__name__}: {exc}"))
+                continue
+
             manifest.record(output, sources, stage.name)
             manifest.save()
             results.append(PipelineResult(stage.name, output, False))

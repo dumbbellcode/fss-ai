@@ -10,7 +10,7 @@ class PreprocessingConfig:
     base_url: str = "https://openrouter.ai/api/v1"
     api_key_env: str = "OPENROUTER_API_KEY"
     provider_order: tuple[str, ...] = ("coreweave",)
-    allow_provider_fallbacks: bool = False
+    allow_provider_fallbacks: bool = True
     require_provider_parameters: bool = False
     temperature: float = 0
     reasoning_effort: str = "low"
@@ -21,6 +21,8 @@ class PreprocessingConfig:
     amendment_applier_model: str = "openai/gpt-oss-120b"
     amendment_applier_max_tokens: int = 4_096
     max_amendment_workers: int = 7
+    llm_max_retries: int = 5
+    llm_retry_base_delay: float = 2.0
 
 
 DEFAULT_CONFIG = PreprocessingConfig()

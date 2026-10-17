@@ -15,6 +15,7 @@ import tiktoken
 
 from prompts.parse_amendment_prompt import PARSE_AMENDMENT
 from pre_processing.config import DEFAULT_CONFIG, PreprocessingConfig
+from pre_processing.retry import invoke_with_retry
 
 
 class AmendmentItem(BaseModel):
@@ -195,7 +196,12 @@ def parse_amendment(
         config.amendment_parser_chunk_tokens,
     )
     parsed_results = [
-        llm.invoke([SystemMessage(content=PARSE_AMENDMENT), HumanMessage(content=part)])
+        invoke_with_retry(
+            llm,
+            [SystemMessage(content=PARSE_AMENDMENT), HumanMessage(content=part)],
+            max_retries=config.llm_max_retries,
+            base_delay=config.llm_retry_base_delay,
+        )
         for part in parsed_documents
     ]
     changes: list[AmendmentItem] = []

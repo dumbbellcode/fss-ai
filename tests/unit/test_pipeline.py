@@ -203,6 +203,82 @@ def test_continue_on_error_false_raises(tmp_path):
         run_pipeline([Item(kind="doc", base_stem="reg", root=tmp_path)], stages, _manifest(tmp_path))
 
 
+def test_parallel_run_preserves_item_order(tmp_path):
+    names = ("a", "b", "c", "d")
+    items = []
+    for name in names:
+        _write(tmp_path / "original" / f"{name}.pdf", "pdf")
+        items.append(Item(kind="doc", base_stem=name, root=tmp_path))
+
+    stages = [Stage("convert", "original", ".pdf", "converted", ".md", {"doc": lambda s, d: _write(d, "md")})]
+    manifest = _manifest(tmp_path)
+    results = run_pipeline(items, stages, manifest, max_workers=4)
+
+    assert [r.path.name for r in results] == [f"{n}.md" for n in names]
+    assert all(r.error is None and not r.skipped for r in results)
+    assert all((tmp_path / "converted" / f"{n}.md").exists() for n in names)
+
+
+def test_parallel_run_is_incremental_on_rerun(tmp_path):
+    _write(tmp_path / "original" / "a.pdf", "pdf")
+    item = Item(kind="doc", base_stem="a", root=tmp_path)
+    stages = [Stage("convert", "original", ".pdf", "converted", ".md", {"doc": lambda s, d: _write(d, "md")})]
+    manifest = _manifest(tmp_path)
+
+    run_pipeline([item], stages, manifest, max_workers=4)
+    second = run_pipeline([item], stages, manifest, max_workers=4)
+
+    assert all(r.skipped for r in second)
+
+
+def test_parallel_run_executes_concurrently(tmp_path):
+    import threading
+    import time
+
+    names = ("a", "b", "c", "d")
+    items = []
+    for name in names:
+        _write(tmp_path / "original" / f"{name}.pdf", "pdf")
+        items.append(Item(kind="doc", base_stem=name, root=tmp_path))
+
+    lock = threading.Lock()
+    state = {"active": 0, "peak": 0}
+
+    def _process(src: Path, dst: Path) -> None:
+        with lock:
+            state["active"] += 1
+            state["peak"] = max(state["peak"], state["active"])
+        time.sleep(0.05)
+        with lock:
+            state["active"] -= 1
+        _write(dst, "md")
+
+    stages = [Stage("convert", "original", ".pdf", "converted", ".md", {"doc": _process})]
+    run_pipeline(items, stages, _manifest(tmp_path), max_workers=4)
+
+    assert state["peak"] > 1
+
+
+def test_parallel_run_isolates_failures(tmp_path):
+    names = ("bad", "good")
+    items = []
+    for name in names:
+        _write(tmp_path / "original" / f"{name}.pdf", "pdf")
+        items.append(Item(kind="doc", base_stem=name, root=tmp_path))
+
+    def _process(src: Path, dst: Path) -> None:
+        if src.stem == "bad":
+            raise RuntimeError("kaboom")
+        _write(dst, "ok")
+
+    stages = [Stage("convert", "original", ".pdf", "converted", ".md", {"doc": _process})]
+    results = run_pipeline(items, stages, _manifest(tmp_path), max_workers=4, continue_on_error=True)
+
+    assert [r.path.name for r in results] == ["bad.md", "good.md"]
+    assert results[0].error is not None
+    assert results[1].error is None
+
+
 def test_dependency_change_triggers_rerun(tmp_path):
     _write(tmp_path / "original" / "reg.pdf", "pdf")
     _write(tmp_path / "cleaned" / "reg.json", "{}")

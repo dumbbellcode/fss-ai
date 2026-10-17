@@ -21,6 +21,7 @@ class PreprocessingConfig:
     amendment_applier_model: str = "openai/gpt-oss-120b"
     amendment_applier_max_tokens: int = 4_096
     max_amendment_workers: int = 7
+    max_pipeline_workers: int = 5
     llm_max_retries: int = 5
     llm_retry_base_delay: float = 2.0
 

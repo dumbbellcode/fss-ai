@@ -15,6 +15,8 @@ skipped on subsequent runs. Callers may select a subset of stages to run.
 
 import hashlib
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Sequence
@@ -127,44 +129,71 @@ def run_pipeline(
     selected: Sequence[str] | None = None,
     force: bool = False,
     continue_on_error: bool = False,
+    max_workers: int = 1,
 ) -> list[PipelineResult]:
     """Run ``items`` through ``stages``, skipping up-to-date outputs.
 
     ``selected`` restricts which stage names run; ``None`` means all stages.
-    Returns one :class:`PipelineResult` per (item, stage) that applies.
+    Returns one :class:`PipelineResult` per (item, stage) that applies, in
+    item order.
 
     When ``continue_on_error`` is True, a failing item is recorded with its error
     message and the run proceeds to the remaining items (failures are reported in
     the returned results). Progress already saved to the manifest is never lost.
+
+    ``max_workers`` > 1 processes the items of each stage concurrently. Stages are
+    still run in order, so a stage only starts once the previous one is complete.
     """
     selected = set(selected) if selected is not None else None
     results: list[PipelineResult] = []
+    manifest_lock = threading.Lock()
 
     for stage in stages:
+        if selected is not None and stage.name not in selected:
+            continue
+
+        # Build the work plan for this stage, preserving item order.
+        plans: list[tuple[Item, Path, Path, list[Path] | Sequence[Path], bool]] = []
         for item in items:
-            if selected is not None and stage.name not in selected:
-                continue
             if not _applies(stage, item):
                 continue
-
             source, output = _stage_paths(stage, item)
             sources = stage.dependencies(item) if stage.dependencies else [source]
+            skipped = not force and manifest.is_current(output, sources)
+            plans.append((item, source, output, sources, skipped))
 
-            if not force and manifest.is_current(output, sources):
-                results.append(PipelineResult(stage.name, output, True))
-                continue
+        stage_results: list[PipelineResult | None] = [None] * len(plans)
 
+        def run_one(index: int) -> None:
+            item, source, output, sources, skipped = plans[index]
+            if skipped:
+                stage_results[index] = PipelineResult(stage.name, output, True)
+                return
             try:
                 _processor(stage, item.kind)(source, output)
             except Exception as exc:  # noqa: BLE001 - surfaced in the result
                 if not continue_on_error:
                     raise
-                results.append(PipelineResult(stage.name, output, False, f"{type(exc).__name__}: {exc}"))
-                continue
+                stage_results[index] = PipelineResult(
+                    stage.name, output, False, f"{type(exc).__name__}: {exc}"
+                )
+                return
+            with manifest_lock:
+                manifest.record(output, sources, stage.name)
+                manifest.save()
+            stage_results[index] = PipelineResult(stage.name, output, False)
 
-            manifest.record(output, sources, stage.name)
-            manifest.save()
-            results.append(PipelineResult(stage.name, output, False))
+        indexes = range(len(plans))
+        if max_workers > 1 and len(plans) > 1:
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = [executor.submit(run_one, index) for index in indexes]
+                for future in futures:
+                    future.result()
+        else:
+            for index in indexes:
+                run_one(index)
+
+        results.extend(result for result in stage_results if result is not None)
 
     manifest.save()
     return results

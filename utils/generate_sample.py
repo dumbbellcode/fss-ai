@@ -177,6 +177,12 @@ def main() -> None:
         help="Comma-separated regulation directory names (e.g. '03,04,10') or paths. Default: SAMPLE_DIRECTORIES.",
     )
     parser.add_argument("--force", action="store_true", help="Re-run stages even when outputs are up to date.")
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=DEFAULT_CONFIG.max_pipeline_workers,
+        help=f"Files processed concurrently per stage (default: {DEFAULT_CONFIG.max_pipeline_workers}).",
+    )
     args = parser.parse_args()
 
     selected = parse_stages(args.stages)
@@ -209,6 +215,7 @@ def main() -> None:
             selected=selected,
             force=args.force,
             continue_on_error=True,
+            max_workers=args.workers,
         )
         failures = [result for result in results if result.error]
         for result in results:

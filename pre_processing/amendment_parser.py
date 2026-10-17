@@ -63,19 +63,61 @@ def _marker_spans(document: str, patterns: list[re.Pattern]) -> list[tuple[int, 
     return spans
 
 
-def _split_amendment_document(document: str, max_tokens: int) -> list[str]:
+def _force_split_oversized(text: str, max_tokens: int) -> list[str]:
+    """Split ``text`` into pieces under ``max_tokens``, preferring natural breaks.
+
+    Used only as a last resort for a single amendment block that is itself larger
+    than the budget (e.g. a huge schedule table): keeping it whole would exceed the
+    model context entirely. Tries paragraph, then line, then sentence boundaries,
+    falling back to hard token windows.
+    """
+    if len(_encoding.encode(text)) <= max_tokens:
+        return [text]
+
+    for separator in ("\n\n", "\n", ". "):
+        parts = text.split(separator)
+        if len(parts) == 1:
+            continue
+        pieces: list[str] = []
+        current = ""
+        for part in parts:
+            candidate = part if not current else current + separator + part
+            if current and len(_encoding.encode(candidate)) > max_tokens:
+                pieces.append(current)
+                current = part
+            else:
+                current = candidate
+        if current:
+            pieces.append(current)
+        if all(len(_encoding.encode(piece)) <= max_tokens for piece in pieces):
+            return pieces
+
+    tokens = _encoding.encode(text)
+    return [
+        _encoding.decode(tokens[start : start + max_tokens])
+        for start in range(0, len(tokens), max_tokens)
+    ]
+
+
+def _split_amendment_document(
+    document: str,
+    max_tokens: int,
+    hard_max_tokens: int | None = None,
+) -> list[str]:
     """Group complete amendment blocks into chunks under ``max_tokens``.
 
     Splits only at amendment-block boundaries, so one amendment's text never
     spans two chunks. The notification prefix is repeated in every chunk so each
     piece is self-contained. A single block larger than ``max_tokens`` keeps its
-    own chunk intact rather than being cut mid-amendment.
+    own chunk intact rather than being cut mid-amendment, unless it also exceeds
+    ``hard_max_tokens`` (then it is force-split, since it cannot be sent whole).
     """
     if len(_encoding.encode(document)) <= max_tokens:
         return [document]
     spans = _marker_spans(document, _SEMANTIC_MARKERS)
     if not spans:
-        return [document]
+        chunks = [document]
+        return _force_split_all(chunks, hard_max_tokens)
 
     prefix = document[: spans[0][0]]
     prefix_tokens = len(_encoding.encode(prefix))
@@ -97,7 +139,20 @@ def _split_amendment_document(document: str, max_tokens: int) -> list[str]:
         current_tokens += tokens
     if current:
         chunks.append(prefix + "".join(current))
-    return chunks or [document]
+    return _force_split_all(chunks or [document], hard_max_tokens)
+
+
+def _force_split_all(chunks: list[str], hard_max_tokens: int | None) -> list[str]:
+    """Force-split any chunk still exceeding the hard ceiling."""
+    if hard_max_tokens is None:
+        return chunks
+    result: list[str] = []
+    for chunk in chunks:
+        if len(_encoding.encode(chunk)) > hard_max_tokens:
+            result.extend(_force_split_oversized(chunk, hard_max_tokens))
+        else:
+            result.append(chunk)
+    return result
 
 
 def _source_amendment_blocks(document: str) -> list[str]:
@@ -194,6 +249,7 @@ def parse_amendment(
     parsed_documents = _split_amendment_document(
         document,
         config.amendment_parser_chunk_tokens,
+        hard_max_tokens=config.amendment_parser_hard_chunk_tokens,
     )
     parsed_results = [
         invoke_with_retry(

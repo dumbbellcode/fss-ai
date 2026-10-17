@@ -135,6 +135,26 @@ def test_split_amendment_document_keeps_large_budget_in_one_chunk():
 
     assert _split_amendment_document(document, 30_000) == [document]
 
+
+def test_split_keeps_oversized_block_whole_without_hard_ceiling():
+    encoding = tiktoken.get_encoding("cl100k_base")
+    document = "\n".join(["a plain sentence with no amendment markers"] * 200)
+
+    chunks = _split_amendment_document(document, 50)
+
+    assert chunks == [document]
+    assert len(encoding.encode(chunks[0])) > 50
+
+
+def test_split_force_splits_oversized_block_when_hard_ceiling_set():
+    encoding = tiktoken.get_encoding("cl100k_base")
+    document = "\n".join(["a plain sentence with no amendment markers"] * 200)
+
+    chunks = _split_amendment_document(document, 50, hard_max_tokens=50)
+
+    assert len(chunks) > 1
+    assert all(len(encoding.encode(chunk)) <= 50 for chunk in chunks)
+
 def test_parse_amendment_omits_reasoning_effort_by_default(tmp_path):
     output = tmp_path / "amendment.json"
     result = AmendmentList(date="2026-06-23", changes=[])

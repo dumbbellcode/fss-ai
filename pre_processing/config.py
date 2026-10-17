@@ -18,6 +18,7 @@ class PreprocessingConfig:
     amendment_parser_model: str = "openai/gpt-oss-120b"
     amendment_parser_max_tokens: int = 16_384
     amendment_parser_chunk_tokens: int = 8_000
+    amendment_parser_hard_chunk_tokens: int = 24_000
     amendment_applier_model: str = "openai/gpt-oss-120b"
     amendment_applier_max_tokens: int = 4_096
     max_amendment_workers: int = 7

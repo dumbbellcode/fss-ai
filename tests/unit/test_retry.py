@@ -19,6 +19,11 @@ class _Status(Exception):
         self.status_code = status_code
 
 
+def test_is_retryable_for_length_finish_reason():
+    exc = openai.LengthFinishReasonError(completion=Mock())
+    assert is_retryable_llm_error(exc)
+
+
 def test_is_retryable_for_openai_rate_limit():
     assert is_retryable_llm_error(_rate_limit_error())
 

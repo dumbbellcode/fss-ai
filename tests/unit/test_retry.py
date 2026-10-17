@@ -19,9 +19,10 @@ class _Status(Exception):
         self.status_code = status_code
 
 
-def test_is_retryable_for_length_finish_reason():
+def test_length_finish_reason_is_not_retried():
+    # Handled by the plain-JSON fallback in the amendment parser, not by retry.
     exc = openai.LengthFinishReasonError(completion=Mock())
-    assert is_retryable_llm_error(exc)
+    assert not is_retryable_llm_error(exc)
 
 
 def test_is_retryable_for_openai_rate_limit():

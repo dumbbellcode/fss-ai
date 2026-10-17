@@ -15,14 +15,11 @@ import openai
 
 # ``langchain_openai`` re-raises openai errors behind its own subclasses but sets
 # the original openai exception as ``__cause__``, so the chain is inspected too.
-# ``LengthFinishReasonError`` is included because hitting the completion cap on
-# structured output is intermittent: the same prompt usually succeeds on retry.
 _RETRYABLE_OPENAI_ERRORS = (
     openai.RateLimitError,
     openai.APIConnectionError,
     openai.APITimeoutError,
     openai.InternalServerError,
-    openai.LengthFinishReasonError,
 )
 
 

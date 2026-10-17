@@ -7,10 +7,11 @@ import re
 from pathlib import Path
 from typing import Optional
 
+import openai
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 import tiktoken
 
 from prompts.parse_amendment_prompt import PARSE_AMENDMENT
@@ -215,6 +216,67 @@ def _normalize_change_targets(changes: list[AmendmentItem]) -> None:
             change.regulation = match.group(1)
 
 
+_JSON_ONLY_INSTRUCTION = (
+    "Respond with a single JSON object and nothing else: no prose, no markdown "
+    "code fences, and no explanation. The object must match the schema shown above."
+)
+
+
+def _strip_json_fences(text: str) -> str:
+    """Remove a surrounding markdown code fence from a JSON response."""
+    stripped = text.strip()
+    fence = re.match(r"^```(?:json)?\s*(.*?)\s*```$", stripped, re.DOTALL | re.IGNORECASE)
+    return fence.group(1).strip() if fence else stripped
+
+
+def _invoke_plain_json(base_llm, part: str, config: PreprocessingConfig) -> AmendmentList:
+    """Ask for plain JSON (no tool calling) and validate it with the schema."""
+    messages = [
+        SystemMessage(content=f"{PARSE_AMENDMENT}\n\n{_JSON_ONLY_INSTRUCTION}"),
+        HumanMessage(content=part),
+    ]
+    last_error: Exception | None = None
+    for _ in range(config.llm_max_retries + 1):
+        response = invoke_with_retry(
+            base_llm,
+            messages,
+            max_retries=config.llm_max_retries,
+            base_delay=config.llm_retry_base_delay,
+        )
+        content = response.content if isinstance(response.content, str) else str(response.content)
+        try:
+            return AmendmentList.model_validate_json(_strip_json_fences(content))
+        except ValidationError as exc:
+            last_error = exc
+    assert last_error is not None
+    raise last_error
+
+
+def _invoke_amendment(
+    part: str,
+    base_llm,
+    structured_llm,
+    config: PreprocessingConfig,
+) -> AmendmentList:
+    """Parse one document chunk, preferring structured output.
+
+    Tool-calling structured output occasionally runs to the completion cap
+    (``LengthFinishReasonError``) without producing a usable result. When that
+    happens, fall back to asking for plain JSON and validating it with the same
+    pydantic model.
+    """
+    messages = [SystemMessage(content=PARSE_AMENDMENT), HumanMessage(content=part)]
+    try:
+        return invoke_with_retry(
+            structured_llm,
+            messages,
+            max_retries=config.llm_max_retries,
+            base_delay=config.llm_retry_base_delay,
+        )
+    except openai.LengthFinishReasonError:
+        return _invoke_plain_json(base_llm, part, config)
+
+
 def parse_amendment(
     md_path: str | Path,
     output_json_path: str | Path | None = None,
@@ -244,7 +306,8 @@ def parse_amendment(
     }
     if config.amendment_parser_reasoning_effort is not None:
         llm_kwargs["reasoning_effort"] = config.amendment_parser_reasoning_effort
-    llm = ChatOpenAI(**llm_kwargs).with_structured_output(AmendmentList)
+    base_llm = ChatOpenAI(**llm_kwargs)
+    structured_llm = base_llm.with_structured_output(AmendmentList)
 
     parsed_documents = _split_amendment_document(
         document,
@@ -252,12 +315,7 @@ def parse_amendment(
         hard_max_tokens=config.amendment_parser_hard_chunk_tokens,
     )
     parsed_results = [
-        invoke_with_retry(
-            llm,
-            [SystemMessage(content=PARSE_AMENDMENT), HumanMessage(content=part)],
-            max_retries=config.llm_max_retries,
-            base_delay=config.llm_retry_base_delay,
-        )
+        _invoke_amendment(part, base_llm, structured_llm, config)
         for part in parsed_documents
     ]
     changes: list[AmendmentItem] = []

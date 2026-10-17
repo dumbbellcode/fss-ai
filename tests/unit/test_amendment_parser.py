@@ -1,14 +1,17 @@
 import json
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, Mock, patch
 
+import openai
 import tiktoken
 
 from pre_processing.amendment_parser import (
     AmendmentItem,
     AmendmentList,
+    _invoke_amendment,
     _restore_truncated_text,
     _split_amendment_document,
+    _strip_json_fences,
     parse_amendment,
 )
 from pre_processing.config import PreprocessingConfig
@@ -154,6 +157,40 @@ def test_split_force_splits_oversized_block_when_hard_ceiling_set():
 
     assert len(chunks) > 1
     assert all(len(encoding.encode(chunk)) <= 50 for chunk in chunks)
+
+
+def test_strip_json_fences_unwraps_code_block():
+    assert _strip_json_fences('```json\n{"a": 1}\n```') == '{"a": 1}'
+    assert _strip_json_fences('```\n{"a": 1}\n```') == '{"a": 1}'
+    assert _strip_json_fences('{"a": 1}') == '{"a": 1}'
+
+
+def test_invoke_amendment_falls_back_to_plain_json_on_length_error():
+    structured = MagicMock()
+    structured.invoke.side_effect = openai.LengthFinishReasonError(completion=Mock())
+
+    base = MagicMock()
+    payload = json.dumps({"date": "2016-07-13", "changes": [{"amendment_text": "x"}]})
+    base.invoke.return_value = MagicMock(content=payload)
+
+    result = _invoke_amendment("some chunk text", base, structured, PreprocessingConfig())
+
+    assert result.date == "2016-07-13"
+    assert len(result.changes) == 1
+    assert result.changes[0].amendment_text == "x"
+    assert base.invoke.called
+
+
+def test_invoke_amendment_uses_structured_output_when_it_succeeds():
+    structured = MagicMock()
+    structured.invoke.return_value = AmendmentList(date="2020-01-01", changes=[])
+    base = MagicMock()
+
+    result = _invoke_amendment("chunk", base, structured, PreprocessingConfig())
+
+    assert result.date == "2020-01-01"
+    assert not base.invoke.called
+
 
 def test_parse_amendment_omits_reasoning_effort_by_default(tmp_path):
     output = tmp_path / "amendment.json"

@@ -44,16 +44,127 @@ def test_convert_pdf_explicit_docling_method(tmp_path):
     assert output.read_text(encoding="utf-8") == "| a | b |\n"
 
 
-def test_docling_pipeline_disables_ocr():
-    docling = pytest.importorskip("docling")
+def test_pdf_has_text_layer_detects_scans(tmp_path):
+    pytest.importorskip("pymupdf")
+    import pymupdf
 
-    from docling.datamodel.base_models import InputFormat
-    from docling.datamodel.pipeline_options import PdfPipelineOptions
-    from docling.document_converter import PdfFormatOption
+    from utils.pdf_to_md import _pdf_has_text_layer, _pdf_text_chars
 
-    pipeline_options = PdfPipelineOptions()
-    pipeline_options.do_ocr = False
-    assert pipeline_options.do_ocr is False
-    assert InputFormat.PDF is not None
-    assert PdfFormatOption is not None
-    assert docling is not None
+    with pymupdf.open() as document:
+        page = document.new_page()
+        page.insert_text(
+            (72, 72),
+            "Food Safety and Standards (Food Products Standards and Food Additives)\n"
+            "Regulations, 2011 - these are the principal regulations and they have\n"
+            "a text layer that can be extracted without running OCR.",
+        )
+        text_pdf = tmp_path / "text.pdf"
+        document.save(text_pdf)
+
+    with pymupdf.open() as document:
+        document.new_page()  # blank page => no text layer, like a scan
+        scan_pdf = tmp_path / "scan.pdf"
+        document.save(scan_pdf)
+
+    assert _pdf_has_text_layer(text_pdf) is True
+    assert _pdf_has_text_layer(scan_pdf) is False
+    assert _pdf_text_chars(scan_pdf) == 0
+
+
+def test_ocr_languages_come_from_env(monkeypatch):
+    from utils import pdf_to_md as module
+
+    monkeypatch.delenv("FSSAI_OCR_LANGS", raising=False)
+    assert module._ocr_languages() == ["eng"]
+
+    monkeypatch.setenv("FSSAI_OCR_LANGS", "eng, hin ,")
+    assert module._ocr_languages() == ["eng", "hin"]
+
+    monkeypatch.setenv("FSSAI_OCR_LANGS", " , ")
+    assert module._ocr_languages() == ["eng"]
+
+
+def test_resolve_ocr_languages_drops_missing_models(monkeypatch, capsys):
+    from utils import pdf_to_md as module
+
+    monkeypatch.setenv("FSSAI_OCR_LANGS", "eng,hin")
+    monkeypatch.setattr(module, "_installed_ocr_languages", lambda: {"eng", "osd"})
+    assert module._resolve_ocr_languages() == ["eng"]
+    assert "hin" in capsys.readouterr().err
+
+    # Probing failure (no tesseract binary) keeps the request untouched.
+    monkeypatch.setattr(module, "_installed_ocr_languages", lambda: None)
+    assert module._resolve_ocr_languages() == ["eng", "hin"]
+
+    monkeypatch.setattr(module, "_installed_ocr_languages", lambda: set())
+    assert module._resolve_ocr_languages() == []
+
+
+def test_docling_enables_ocr_only_for_pdfs_without_a_text_layer(tmp_path, monkeypatch):
+    pytest.importorskip("docling")
+    from docling import document_converter as dc
+    from docling.datamodel import pipeline_options as po
+
+    from utils import pdf_to_md as module
+
+    seen: dict = {}
+
+    class SpyOptions(po.PdfPipelineOptions):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            seen["options"] = self
+
+    class StubConverter:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def convert(self, path):
+            return type("R", (), {"document": type("D", (), {"export_to_markdown": lambda self: "text"})()})()
+
+    monkeypatch.setattr(po, "PdfPipelineOptions", SpyOptions)
+    monkeypatch.setattr(dc, "DocumentConverter", StubConverter)
+    monkeypatch.setattr(module, "_installed_ocr_languages", lambda: {"eng"})
+
+    pdf = tmp_path / "scan.pdf"
+    pdf.write_bytes(b"%PDF-1.4 fake")
+
+    monkeypatch.setattr(module, "_pdf_has_text_layer", lambda path, minimum_chars=100: False)
+    assert module._convert_with_docling(pdf) == "text"
+    assert seen["options"].do_ocr is True
+    assert list(seen["options"].ocr_options.lang) == ["eng"]
+
+    monkeypatch.setattr(module, "_pdf_has_text_layer", lambda path, minimum_chars=100: True)
+    assert module._convert_with_docling(pdf) == "text"
+    assert seen["options"].do_ocr is False
+
+
+def test_docling_skips_ocr_when_no_language_is_installed(tmp_path, monkeypatch):
+    pytest.importorskip("docling")
+    from docling import document_converter as dc
+    from docling.datamodel import pipeline_options as po
+
+    from utils import pdf_to_md as module
+
+    seen: dict = {}
+
+    class SpyOptions(po.PdfPipelineOptions):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            seen["options"] = self
+
+    class StubConverter:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def convert(self, path):
+            return type("R", (), {"document": type("D", (), {"export_to_markdown": lambda self: "text"})()})()
+
+    monkeypatch.setattr(po, "PdfPipelineOptions", SpyOptions)
+    monkeypatch.setattr(dc, "DocumentConverter", StubConverter)
+    monkeypatch.setattr(module, "_installed_ocr_languages", lambda: set())
+    monkeypatch.setattr(module, "_pdf_has_text_layer", lambda path, minimum_chars=100: False)
+
+    pdf = tmp_path / "scan.pdf"
+    pdf.write_bytes(b"%PDF-1.4 fake")
+    assert module._convert_with_docling(pdf) == "text"
+    assert seen["options"].do_ocr is False

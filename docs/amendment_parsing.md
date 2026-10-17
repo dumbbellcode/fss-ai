@@ -18,6 +18,53 @@ cleanup or parsing code, the source hash is unchanged, so you must force a
 regeneration (delete the `cleaned/`+`parsed/` entries for the files, or run with
 `--force`).
 
+## Convert stage — scanned PDFs (no text layer)
+
+`utils/pdf_to_md.py` disables OCR by default because most FSSAI PDFs have a text
+layer and OCR only adds noise. A handful of notifications are **pure scans**
+(image-only, zero extractable text); with OCR off they convert to nothing and the
+whole downstream chain is empty (the PDF is still "processed" — the failure is
+silent).
+
+`_pdf_has_text_layer` (via pymupdf) counts the text-layer characters; below 100
+chars the file is treated as a scan and docling runs with
+`TesseractCliOcrOptions(lang=["eng"], force_full_page_ocr=True)` (needs the
+`tesseract` binary on `PATH`; falls back to no-OCR with a warning if unavailable).
+
+Scans are OCR'd with Tesseract. Most are **English-only** (`eng`); the bilingual
+Hindi-first gazettes need `eng,hin` so the Hindi comes out as real Devanagari and
+`_cut_leading_hindi` can strip it. With `eng` alone that Hindi becomes *Latin*
+gibberish that no Devanagari check can see, so it survives into `cleaned/`.
+
+Language is controlled by `FSSAI_OCR_LANGS` (default `eng`); uninstalled codes are
+dropped with a warning, and if nothing is installed OCR is skipped. The `hin`
+model is not part of a plain tesseract install:
+
+```bash
+brew install tesseract-lang                       # or drop hin.traineddata in tessdata
+FSSAI_OCR_LANGS=eng,hin .venv/bin/python utils/pdf_to_md.py <scan.pdf>
+```
+
+Do **not** make `eng,hin` the default: on English-only scans tesseract then reads
+Latin text as Devanagari and mangles the header (verified on 02/amendments/84).
+
+Scans that needed `eng,hin` (bilingual): `04/amendments/17_Notification_Antibiotics_Honey`,
+`23/Regulation`, `24/Regulation`, `25/Regulation`. Verified image-only
+notifications in this corpus:
+
+```
+02/amendments/80,81,82,84,85   03/amendments/17   04/amendments/17
+05/amendments/03               16/amendments/05
+23/Regulation  24/Regulation  24/amendments/01   25/Regulation
+```
+
+`11/amendments/06_269202.pdf` looks empty (~576 cleaned chars) but *does* have a
+text layer; it is simply a one-page document, not a scan.
+
+Data-quality trap: `02/Compendium.pdf` is not a compendium at all — it is a
+printout of the FSSAI website/chatbot page (nav links, `chatbotliveffrc` logo
+paths, "Last Updated"). No cleaner can fix that; the source needs replacing.
+
 ## Clean stage — bilingual gazette layout
 
 Almost every amendment PDF is **Hindi first, English second**, both as contiguous

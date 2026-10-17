@@ -9,7 +9,12 @@ class PreprocessingConfig:
 
     base_url: str = "https://openrouter.ai/api/v1"
     api_key_env: str = "OPENROUTER_API_KEY"
-    provider_order: tuple[str, ...] = ("coreweave",)
+    # Empty means "let OpenRouter choose". Pinning a single provider (e.g.
+    # ("coreweave",)) was observed to make gpt-oss-120b return an empty response
+    # (finish_reason=stop with no tool call) for structured amendment parsing,
+    # which with_structured_output silently turns into zero changes. Set this to
+    # a tuple of provider slugs only if you deliberately want to prefer them.
+    provider_order: tuple[str, ...] = ()
     allow_provider_fallbacks: bool = True
     require_provider_parameters: bool = False
     temperature: float = 0

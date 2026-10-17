@@ -257,6 +257,48 @@ def _strip_json_fences(text: str) -> str:
     return fence.group(1).strip() if fence else stripped
 
 
+_CHANGE_INSTRUCTION_RE = re.compile(
+    r"shall\s+be\s+(?:substituted|inserted|omitted|added|deleted|replaced|re-?numbered)|"
+    r"the\s+following\b[^.\n]{0,60}\bshall\s+be\s+(?:inserted|substituted|added)|"
+    r"\bin\s+(?:regulation|sub-regulation|Schedule|Annexure|Form)\b",
+    re.IGNORECASE,
+)
+
+
+def _has_change_instructions(part: str) -> bool:
+    """Whether a chunk looks like it contains at least one change to extract."""
+    return bool(_CHANGE_ITEM_MARKER_RE.search(part) or _CHANGE_INSTRUCTION_RE.search(part))
+
+
+def _result_is_degenerate(result: AmendmentList, part: str) -> bool:
+    """Detect empty or placeholder model output that should be retried.
+
+    Structured output can fail silently: some providers answer with no tool call,
+    which becomes an empty ``changes`` list, and the model can also emit a tiny
+    placeholder such as ``in ... ...`` instead of copying the source text.
+    """
+    if not result.changes:
+        return _has_change_instructions(part)
+    if len(result.changes) == 1:
+        text = result.changes[0].amendment_text.strip()
+        if len(text) <= 32 and re.search(r"(?:\.\.\.|…)", text):
+            return True
+    return False
+
+
+def _provider_extra_body(config: PreprocessingConfig) -> dict | None:
+    """Build the OpenRouter provider-preference body, or ``None`` for defaults."""
+    if not config.provider_order:
+        return None
+    return {
+        "provider": {
+            "order": list(config.provider_order),
+            "allow_fallbacks": config.allow_provider_fallbacks,
+            "require_parameters": config.require_provider_parameters,
+        }
+    }
+
+
 def _invoke_plain_json(base_llm, part: str, config: PreprocessingConfig) -> AmendmentList:
     """Ask for plain JSON (no tool calling) and validate it with the schema."""
     messages = [
@@ -289,13 +331,13 @@ def _invoke_amendment(
     """Parse one document chunk, preferring structured output.
 
     Tool-calling structured output occasionally runs to the completion cap
-    (``LengthFinishReasonError``) without producing a usable result. When that
-    happens, fall back to asking for plain JSON and validating it with the same
-    pydantic model.
+    (``LengthFinishReasonError``) without producing a usable result, or answers
+    with no tool call at all (an empty ``changes`` list). Both cases fall back to
+    asking for plain JSON and validating it with the same pydantic model.
     """
     messages = [SystemMessage(content=PARSE_AMENDMENT), HumanMessage(content=part)]
     try:
-        return invoke_with_retry(
+        result = invoke_with_retry(
             structured_llm,
             messages,
             max_retries=config.llm_max_retries,
@@ -303,6 +345,9 @@ def _invoke_amendment(
         )
     except openai.LengthFinishReasonError:
         return _invoke_plain_json(base_llm, part, config)
+    if _result_is_degenerate(result, part):
+        return _invoke_plain_json(base_llm, part, config)
+    return result
 
 
 def parse_amendment(
@@ -324,14 +369,10 @@ def parse_amendment(
         "api_key": os.environ[config.api_key_env],
         "temperature": config.temperature,
         "max_tokens": config.amendment_parser_max_tokens,
-        "extra_body": {
-            "provider": {
-                "order": list(config.provider_order),
-                "allow_fallbacks": config.allow_provider_fallbacks,
-                "require_parameters": config.require_provider_parameters,
-            }
-        },
     }
+    extra_body = _provider_extra_body(config)
+    if extra_body is not None:
+        llm_kwargs["extra_body"] = extra_body
     if config.amendment_parser_reasoning_effort is not None:
         llm_kwargs["reasoning_effort"] = config.amendment_parser_reasoning_effort
     base_llm = ChatOpenAI(**llm_kwargs)

@@ -11,9 +11,12 @@ from pre_processing.amendment_parser import (
     _CHANGE_ITEM_MARKER_RE,
     _SUBREGULATION_MARKER_RE,
     _TOP_LEVEL_MARKER_RE,
+    _has_change_instructions,
     _invoke_amendment,
     _marker_spans,
+    _provider_extra_body,
     _restore_truncated_text,
+    _result_is_degenerate,
     _SEMANTIC_MARKERS,
     _split_amendment_document,
     _strip_json_fences,
@@ -31,6 +34,14 @@ def _fake_llm(result: AmendmentList) -> MagicMock:
     fake.with_structured_output.return_value = fake
     fake.invoke.return_value = result
     return fake
+
+
+def _sample_result() -> AmendmentList:
+    """A non-degenerate result so the structured path is used for SAMPLE_MD."""
+    return AmendmentList(
+        date="2026-06-23",
+        changes=[AmendmentItem(amendment_text="in regulation 1.1, the word old shall be omitted")],
+    )
 
 
 def test_parse_amendment_writes_json(tmp_path):
@@ -57,7 +68,7 @@ def test_parse_amendment_writes_json(tmp_path):
 def test_parse_amendment_default_output_path(tmp_path):
     md_copy = tmp_path / "01_273797.cleaned.md"
     md_copy.write_text(SAMPLE_MD.read_text(encoding="utf-8"), encoding="utf-8")
-    result = AmendmentList(date="2026-06-23", changes=[])
+    result = _sample_result()
     with patch("pre_processing.amendment_parser.ChatOpenAI", return_value=_fake_llm(result)):
         parse_amendment(md_copy)
 
@@ -66,7 +77,7 @@ def test_parse_amendment_default_output_path(tmp_path):
 
 def test_parse_amendment_invokes_with_document(tmp_path):
     output = tmp_path / "amendment.json"
-    result = AmendmentList(date="2026-06-23", changes=[])
+    result = _sample_result()
     fake = _fake_llm(result)
     with patch("pre_processing.amendment_parser.ChatOpenAI", return_value=fake):
         parse_amendment(SAMPLE_MD, output)
@@ -79,7 +90,7 @@ def test_parse_amendment_invokes_with_document(tmp_path):
 
 def test_parse_amendment_uses_injected_config(tmp_path):
     output = tmp_path / "amendment.json"
-    result = AmendmentList(date="2026-06-23", changes=[])
+    result = _sample_result()
     config = PreprocessingConfig(
         amendment_parser_model="test/parser",
         amendment_parser_max_tokens=123,
@@ -254,9 +265,63 @@ def test_invoke_amendment_uses_structured_output_when_it_succeeds():
     assert not base.invoke.called
 
 
+def test_has_change_instructions_detects_amendment_text():
+    assert _has_change_instructions("- (1) in regulation 2.2, the word X shall be omitted")
+    assert _has_change_instructions("The following Schedule shall be substituted, namely:-")
+    assert not _has_change_instructions("New Delhi, the 1st January, 2025")
+    assert not _has_change_instructions("")
+
+
+def test_result_is_degenerate_for_empty_changes_with_instructions():
+    part = "- (1) in regulation 2.2, the word X shall be substituted"
+    assert _result_is_degenerate(AmendmentList(date="2020-01-01", changes=[]), part)
+    # An empty result for a chunk with no change instructions is legitimate.
+    assert not _result_is_degenerate(AmendmentList(date="2020-01-01", changes=[]), "cover page only")
+
+
+def test_result_is_degenerate_for_tiny_placeholder():
+    placeholder = AmendmentList(
+        date="2020-01-01",
+        changes=[AmendmentItem(amendment_text="in\xa0\xa0...\xa0\xa0")],
+    )
+    assert _result_is_degenerate(placeholder, "anything")
+
+    real = AmendmentList(
+        date="2020-01-01",
+        changes=[AmendmentItem(amendment_text="in regulation 1.1, substitute 'a, b, ...' ")],
+    )
+    # A long real text containing an ellipsis is not a placeholder.
+    assert not _result_is_degenerate(real, "anything")
+
+
+def test_invoke_amendment_falls_back_when_structured_result_is_empty():
+    structured = MagicMock()
+    structured.invoke.return_value = AmendmentList(date="2020-01-01", changes=[])
+    base = MagicMock()
+    base.invoke.return_value = MagicMock(
+        content=json.dumps({"date": "2020-01-01", "changes": [{"amendment_text": "recovered text"}]})
+    )
+
+    part = "- (1) in regulation 2.2, the word X shall be substituted"
+    result = _invoke_amendment(part, base, structured, PreprocessingConfig())
+
+    assert [c.amendment_text for c in result.changes] == ["recovered text"]
+    assert base.invoke.called
+
+
+def test_provider_extra_body_is_none_without_a_pin():
+    assert _provider_extra_body(PreprocessingConfig()) is None
+
+    pinned = PreprocessingConfig(provider_order=("coreweave",), allow_provider_fallbacks=False)
+    body = _provider_extra_body(pinned)
+    assert body == {
+        "provider": {"order": ["coreweave"], "allow_fallbacks": False, "require_parameters": False}
+    }
+
+
 def test_parse_amendment_omits_reasoning_effort_by_default(tmp_path):
     output = tmp_path / "amendment.json"
-    result = AmendmentList(date="2026-06-23", changes=[])
+    result = _sample_result()
     with patch("pre_processing.amendment_parser.ChatOpenAI", return_value=_fake_llm(result)) as chat:
         parse_amendment(SAMPLE_MD, output)
 

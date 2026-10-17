@@ -209,21 +209,23 @@ def _process_group(llm, group: list, config: PreprocessingConfig = DEFAULT_CONFI
 
 
 def _build_llm(model: str, config: PreprocessingConfig) -> ChatOpenAI:
-    return ChatOpenAI(
-        model=model,
-        base_url=config.base_url,
-        api_key=os.environ[config.api_key_env],
-        temperature=config.temperature,
-        max_tokens=config.amendment_applier_max_tokens,
-        reasoning_effort=config.reasoning_effort,
-        extra_body={
+    kwargs: dict = {
+        "model": model,
+        "base_url": config.base_url,
+        "api_key": os.environ[config.api_key_env],
+        "temperature": config.temperature,
+        "max_tokens": config.amendment_applier_max_tokens,
+        "reasoning_effort": config.reasoning_effort,
+    }
+    if config.provider_order:
+        kwargs["extra_body"] = {
             "provider": {
                 "order": list(config.provider_order),
                 "allow_fallbacks": config.allow_provider_fallbacks,
                 "require_parameters": config.require_provider_parameters,
             }
-        },
-    )
+        }
+    return ChatOpenAI(**kwargs)
 
 
 def apply_amendment_to_regulation(

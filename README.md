@@ -64,16 +64,23 @@ uv run python utils/generate_sample.py --force            # ignore incremental c
 flowchart TD
     subgraph Local ["Local Development"]
         direction TB
-        PDFs["FSSAI PDFs"] -->|download_regulations.py| Fetch
-        Convert["PDF → Markdown"] -->|pre_processing| Cleaned
-        Cleaned["*.cleaned.md"] -->|pre_processing| Parse
-        Parse["Structured JSON"] -->|apply_amendment| final.json
-        final["post_amendment/Regulation.final.json"] -->|ingestion| ChromaDB
-        ChromaDB["Chroma DB db"] -->|retrieve| Query
-        FastAPI["FastAPI (app.py)"] -->|/api/chat| UI
-        UI["static/index.html"] -->|fetch /api/chat| Browser
+        PDFs["FSSAI PDFs"] -->|download_regulations.py| Original["original/*.pdf"]
+        Original -->|convert| Converted["converted/*.md"]
+        Converted -->|clean| Cleaned["cleaned/*.md"]
+        Cleaned -->|parse| Parsed["parsed/*.json"]
+        Parsed -->|post_amendment| Final["post_amendment/Regulation.final.json"]
+        Final -->|ingestion| Ingested["ingestion/Regulation.ingested.json"]
+        Ingested -->|persist| Store["Chroma DB db/"]
+        Store -->|retrieve| Chat["FastAPI app.py"]
+        Chat -->|/api/chat| UI["static/index.html"]
+        UI -->|fetch| Browser["Browser"]
     end
 ```
+
+Each stage reads from and writes to the next directory, under
+`assets/regulations/<regulation>/` (e.g. `cleaned/amendments/*.md` for amendment
+files). The manifest at `<regulation>/manifest.json` records per-file progress so
+re-runs skip work that is already up to date.
 
 ### Production / Cloud Run
 

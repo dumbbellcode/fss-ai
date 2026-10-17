@@ -178,6 +178,13 @@ has change instructions), **elided** (`...` stubs) and **boilerplate**
 
 ## Known residuals / follow-ups
 
+- **`parse_regulation` does not understand the documents' numbering.** It only
+  matches `CHAPTER <digits>` plus `N.M` sections and `N.M.K` subsections, but the
+  gazette regulations use `CHAPTER I` (Roman) and `1. Short title and
+  commencement`, `2. Definitions`. Result: `parsed/Regulation.json` is empty
+  (`{"title":…,"chapters":[],"schedules":[]}`) for 8 of the 9 regulation
+  documents parsed so far; even 02 only yields chapter 2 / section 2.10 out of a
+  1.29 M-char document. This is a parse-stage blocker, not a clean-stage one.
 - `48_Milk_Products` keeps 8 Devanagari lines (interleaved bilingual tables);
   acceptable but not perfect. Per-section language detection would be the general
   fix.

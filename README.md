@@ -113,7 +113,7 @@ flowchart TD
         direction TB
         Q["User Question"] --> E["Embed Question\n(text-embedding-3-large, OpenRouter)"]
         E --> S["Similarity Search\n(Chroma / Qdrant)"]
-        S --> T["Top-k Retrieval\n(k=5 default)"]
+        S --> T["Top-k Retrieval\n(k=3 default)"]
         T --> R["Cross-Encoder Rerank\n(optional, cross-encoder/ms-marco)"]
         R --> L["LLM Generator\n(deepseek/deepseek-v4-flash, OpenRouter)"]
         L --> A["Answer + Source Citations"]

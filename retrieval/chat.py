@@ -46,7 +46,7 @@ class ChatConfig:
     api_key_env: str = "OPENROUTER_API_KEY"
     temperature: float = 0.0
     max_tokens: int = 1_024
-    top_k: int = 5
+    top_k: int = 3
     system_prompt: str = DEFAULT_SYSTEM_PROMPT
     max_history_messages: int = 10
 

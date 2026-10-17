@@ -9,6 +9,7 @@ static chat page. Configure with environment variables:
 - ``QDRANT_COLLECTION`` — Qdrant collection name (default ``fssai_regulations``).
 - ``EMBEDDING_MODEL`` — embedding model id (default: ``openai/text-embedding-3-large``).
 - ``CHAT_MODEL`` — chat model id (default: ``deepseek/deepseek-v4-flash``).
+- ``TOP_K`` — retrieved chunks sent to the model (default: ``3``).
 - ``MAX_HISTORY`` — conversation turns kept in context (default: 10).
 
 Local dev:
@@ -55,6 +56,7 @@ else:
 _session = ChatSession(
     chat_config=ChatConfig(
         model=os.environ.get("CHAT_MODEL", "deepseek/deepseek-v4-flash"),
+        top_k=int(os.environ.get("TOP_K", "3")),
         max_history_messages=int(os.environ.get("MAX_HISTORY", "10")),
     ),
     embedding_model=os.environ.get("EMBEDDING_MODEL"),

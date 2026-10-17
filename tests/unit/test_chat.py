@@ -10,6 +10,10 @@ def _chunk(text: str, metadata: dict | None = None, distance: float = 0.1) -> Re
     return RetrievedChunk(text=text, metadata={"regulation": "Regulation 1", **(metadata or {})}, distance=distance)
 
 
+def test_default_top_k_is_three():
+    assert ChatConfig().top_k == 3
+
+
 def test_format_passages_includes_source_location():
     chunks = [
         _chunk("Food business operator duties", {"chapter": 2, "section": "2.1"}),

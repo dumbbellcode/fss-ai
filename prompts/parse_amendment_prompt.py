@@ -61,5 +61,13 @@ Rules to disambiguate the target of each change:
    and stop early; do not summarize, invent, or renumber the omitted rows. Never return an empty "changes"
    list when the document contains at least one insert or substitute instruction. Do not create a change for
    "1. Short title and commencement".
+8. Never abbreviate with an ellipsis. Do not write "..." or the "…" character anywhere in amendment_text. If
+   a body cannot be copied in full, end the text cleanly at a complete heading or clause boundary instead of
+   inserting "...". An amendment_text that contains "..." is treated as a failed extraction.
+9. Do not turn surrounding boilerplate into changes. Ignore the opening preamble ("Now, therefore, in
+   exercise of the powers conferred ... the Food Safety and Standards Authority of India hereby makes the
+   following regulations ...") and ignore the closing note that lists earlier amending notifications
+   ("Note. - The principal regulations were published ... vide notification numbers: - ... (I) F. No. ...;
+   (II) F. No. ..."). Those sentences are not amendments and must not become change objects.
 
 """

@@ -270,20 +270,28 @@ def _has_change_instructions(part: str) -> bool:
     return bool(_CHANGE_ITEM_MARKER_RE.search(part) or _CHANGE_INSTRUCTION_RE.search(part))
 
 
+def _has_elision(text: str) -> bool:
+    """Whether an amendment text uses an ellipsis to abbreviate (model laziness).
+
+    Verbatim instruction blobs are long and multi-line; a short single-line text
+    that contains ``...`` or ``…`` is the model refusing to copy the source, for
+    example ``"Now, therefore, ... makes the following regulations ..."``.
+    """
+    if not re.search(r"(?:\.\.\.|…)", text):
+        return False
+    return text.count("\n") <= 1 and len(text) <= 1500
+
+
 def _result_is_degenerate(result: AmendmentList, part: str) -> bool:
     """Detect empty or placeholder model output that should be retried.
 
     Structured output can fail silently: some providers answer with no tool call,
-    which becomes an empty ``changes`` list, and the model can also emit a tiny
-    placeholder such as ``in ... ...`` instead of copying the source text.
+    which becomes an empty ``changes`` list, and the model can also emit
+    placeholders such as ``in ... ...`` instead of copying the source text.
     """
     if not result.changes:
         return _has_change_instructions(part)
-    if len(result.changes) == 1:
-        text = result.changes[0].amendment_text.strip()
-        if len(text) <= 32 and re.search(r"(?:\.\.\.|…)", text):
-            return True
-    return False
+    return any(_has_elision(change.amendment_text) for change in result.changes)
 
 
 def _provider_extra_body(config: PreprocessingConfig) -> dict | None:

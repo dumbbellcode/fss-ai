@@ -12,6 +12,7 @@ from pre_processing.amendment_parser import (
     _SUBREGULATION_MARKER_RE,
     _TOP_LEVEL_MARKER_RE,
     _has_change_instructions,
+    _has_elision,
     _invoke_amendment,
     _marker_spans,
     _provider_extra_body,
@@ -286,12 +287,33 @@ def test_result_is_degenerate_for_tiny_placeholder():
     )
     assert _result_is_degenerate(placeholder, "anything")
 
+    elided = AmendmentList(
+        date="2020-01-01",
+        changes=[AmendmentItem(amendment_text="Now, therefore, ... makes the following regulations ...")],
+    )
+    assert _result_is_degenerate(elided, "anything")
+
     real = AmendmentList(
         date="2020-01-01",
-        changes=[AmendmentItem(amendment_text="in regulation 1.1, substitute 'a, b, ...' ")],
+        changes=[
+            AmendmentItem(
+                amendment_text=(
+                    "in sub-regulation 3.2.1, after clause 15, the following clauses shall be"
+                    " inserted, namely:-\n'16. Beta-apo-8'-carotenal:\n- (1) Beta-apo-8'-carotenal"
+                    " in crystal form shall be deep violet ...\n| Common Name | Beta-apo-8'-carotenal |"
+                )
+            )
+        ],
     )
-    # A long real text containing an ellipsis is not a placeholder.
+    # A multi-line verbatim body containing an ellipsis is not a placeholder.
     assert not _result_is_degenerate(real, "anything")
+
+
+def test_has_elision_flags_short_single_line_ellipsis_only():
+    assert _has_elision("Now, therefore, ... makes the following regulations")
+    assert _has_elision("in\xa0\xa0...\xa0\xa0")
+    assert not _has_elision("in regulation 1.1, the word old shall be omitted")
+    assert not _has_elision("a\nb\n...\nlong multi-line verbatim body with a table")
 
 
 def test_invoke_amendment_falls_back_when_structured_result_is_empty():

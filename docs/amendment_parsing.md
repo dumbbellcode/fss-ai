@@ -92,6 +92,33 @@ overlap.
    - `_invoke_amendment` falls back to `_invoke_plain_json`, which asks for JSON
      only, strips code fences, validates with pydantic, and retries on validation
      errors.
+5. **Provider pinning causes silent empty results.** With
+   `provider_order=("coreweave",)` gpt-oss-120b intermittently answers
+   `finish_reason=stop` with **no tool call**; `with_structured_output` turns that
+   into an empty `changes` list and no error, so a chunk yields nothing
+   (44_Vertical_Standards returned 2 changes instead of 20+). A raw probe showed
+   `tool_calls=0` on coreweave vs `tool_calls=1`/11 changes on OpenRouter default
+   routing. `provider_order` now defaults to empty (let OpenRouter choose) and
+   `extra_body` is sent only when a pin is configured — in both `amendment_parser`
+   and `apply_amendment`.
+6. **Lazy / elided output (the main remaining failure mode).** The model
+   sometimes refuses to copy long bodies and emits an ellipsis instead:
+   - a tiny placeholder such as `in ... ...`;
+   - a synthesised sentence such as
+     `Now, therefore, ... makes the following regulations further to amend the ... Regulations`;
+   - a truncated instruction such as `In Table 1, after ... (text truncated)`.
+   `_has_elision` flags a *short, single-line* text containing `...`/`…`
+   (verbatim bodies are long and multi-line), and `_result_is_degenerate` routes
+   any chunk with such a change to the plain-JSON fallback. Prompt rules 8–9 also
+   forbid ellipses and forbid turning the preamble / closing citation list into
+   changes.
+7. **Model fidelity ceiling (unresolved).** gpt-oss-120b is *flaky* at
+   verbatim-echoing large bodies: the same chunk can return the full block one run
+   and a preamble-duplicated stub the next. Consequences: a change's
+   `amendment_text` may be an empty-ish stub, and a document can yield junk
+   entries whose target is the preamble. Smaller `amendment_parser_chunk_tokens`
+   reduces the copy demand; the general fix would be to take the inserted body
+   from the source markdown instead of asking the model to copy it.
 
 ### Prompt rules that matter (`prompts/parse_amendment_prompt.py`)
 
@@ -103,7 +130,23 @@ overlap.
   lead-in and include the new heading.
 - Never emit an empty `changes` list when the document has an insert/substitute
   instruction; do not emit a change for `1. Short title and commencement`.
+- Never abbreviate with `...`/`…`; end at a clean boundary instead (rule 8).
+- Ignore the preamble and the closing "Note. - The principal regulations were
+  published … (I) F. No. …" citation list; they are not amendments (rule 9).
 - Schedule-first disambiguation, one target per change, all six fields present.
+
+## Auditing a parse pass
+
+`utils/audit_parsed_amendments.py` compares each `parsed/amendments/*.json` with
+its cleaned source (no API calls) and flags **empty** (no changes but the source
+has change instructions), **elided** (`...` stubs) and **boilerplate**
+(preamble-as-change) files. Run it after a pass and re-parse the flagged files:
+
+```bash
+.venv/bin/python utils/audit_parsed_amendments.py --dirs 02_,03_ --verbose
+.venv/bin/python utils/generate_sample.py --stages parse --force \
+    --dirs 02_Food_Products_Standards_and_Food_Additives
+```
 
 ## Known residuals / follow-ups
 

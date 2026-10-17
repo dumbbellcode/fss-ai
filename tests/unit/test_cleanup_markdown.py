@@ -1,6 +1,6 @@
 import re
 
-from pre_processing.cleanup_markdown import cleanup_amendment
+from pre_processing.cleanup_markdown import cleanup_amendment, cleanup_regulation
 
 
 def test_cleanup_amendment_falls_back_to_authority_notification(tmp_path):
@@ -196,5 +196,94 @@ def test_cleanup_never_empties_a_devanagari_only_document(tmp_path):
     source.write_text("\n".join(_hindi_line() for _ in range(8)) + "\n", encoding="utf-8")
 
     cleanup_amendment(source, output)
+
+    assert output.read_text(encoding="utf-8").strip()
+
+
+def test_cleanup_regulation_cuts_leading_hindi_block(tmp_path):
+    source = tmp_path / "Regulation.md"
+    output = tmp_path / "cleaned.md"
+    source.write_text(
+        "vlk/kj.k\n"
+        "Hkkx III[k.M 4\n"
+        + "\n".join(_hindi_line() for _ in range(5))
+        + "\n"
+        "## MINISTRY OF HEALTH AND FAMILY WELFARE\n"
+        "\n"
+        "(FOOD SAFETY AND STANDARDS AUTHORITY OF INDIA)\n"
+        "\n"
+        "## NOTIFICATION\n"
+        "\n"
+        "New Delhi, the 29th December, 2017\n"
+        "\n"
+        "1. Short title and commencement.- These regulations may be called the Organic Foods Regulations\n",
+        encoding="utf-8",
+    )
+
+    cleanup_regulation(source, output)
+
+    cleaned = output.read_text(encoding="utf-8")
+    assert cleaned.startswith("## MINISTRY OF HEALTH AND FAMILY WELFARE")
+    assert "Short title and commencement" in cleaned
+    assert "Hkkx" not in cleaned  # legacy-font Hindi header is cut with the block
+    assert not re.search(r"[\u0900-\u097F]", cleaned)
+
+
+def test_cleanup_regulation_leaves_english_only_document_untouched(tmp_path):
+    # The Ministry heading also appears in already-English compendia; nothing may
+    # be dropped because there is no Devanagari before it.
+    source = tmp_path / "Regulation.md"
+    output = tmp_path / "cleaned.md"
+    source.write_text(
+        "## 1.1: Title and commencement\n"
+        "\n"
+        "- 1.1.1:These regulations may be called the Food Safety and Standards Regulations\n"
+        "\n"
+        "## MINISTRY OF HEALTH AND FAMILY WELFARE\n"
+        "\n"
+        "## NOTIFICATION\n"
+        "\n"
+        "F.No. 2-15015/30/2010 Whereas in exercise of the powers conferred\n",
+        encoding="utf-8",
+    )
+
+    cleanup_regulation(source, output)
+
+    cleaned = output.read_text(encoding="utf-8")
+    assert cleaned.startswith("## 1.1: Title and commencement")
+    assert "1.1.1:These regulations may be called" in cleaned
+
+
+def test_cleanup_regulation_drops_trailing_devanagari_line(tmp_path):
+    source = tmp_path / "Regulation.md"
+    output = tmp_path / "cleaned.md"
+    source.write_text(
+        "\n".join(_hindi_line() for _ in range(4))
+        + "\n"
+        "## MINISTRY OF HEALTH AND FAMILY WELFARE\n"
+        "\n"
+        "## NOTIFICATION\n"
+        "\n"
+        "English body line one\n"
+        "English body line two\n"
+        + _hindi_line()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    cleanup_regulation(source, output)
+
+    cleaned = output.read_text(encoding="utf-8")
+    assert cleaned.startswith("## MINISTRY OF HEALTH AND FAMILY WELFARE")
+    assert "English body line two" in cleaned
+    assert not re.search(r"[\u0900-\u097F]", cleaned)
+
+
+def test_cleanup_regulation_never_empties_devanagari_only_document(tmp_path):
+    source = tmp_path / "Regulation.md"
+    output = tmp_path / "cleaned.md"
+    source.write_text("\n".join(_hindi_line() for _ in range(8)) + "\n", encoding="utf-8")
+
+    cleanup_regulation(source, output)
 
     assert output.read_text(encoding="utf-8").strip()

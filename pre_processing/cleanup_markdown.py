@@ -10,12 +10,22 @@ def cleanup_regulation(md_path: str | Path, output_md_path: str | Path) -> None:
     """Clean an extracted Markdown file and write the result to another file.
 
     The cleanup removes known PDF header/footer blocks while preserving the
-    remaining text. It also normalizes line endings and whitespace.
+    remaining text. Gazette regulations are printed Hindi-first, English-second,
+    so the leading Hindi block (real Devanagari *or* a legacy-font transliteration)
+    is cut at the English start and any stray Devanagari line is dropped. An
+    already-English document is left untouched. Line endings and whitespace are
+    normalised.
     """
     input_path = Path(md_path)
     output_path = Path(output_md_path)
 
     lines = input_path.read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n").split("\n")
+
+    def normalized(line: str) -> str:
+        return re.sub(r"\s+", " ", line).strip()
+
+    lines = _cut_leading_hindi(lines, normalized)
+
     patterns = tuple(
         re.compile(re.escape(pattern))
         for pattern in (
@@ -31,6 +41,7 @@ def cleanup_regulation(md_path: str | Path, output_md_path: str | Path) -> None:
         if 0 <= index + offset < len(lines)
     }
     text = "\n".join(line.rstrip() for index, line in enumerate(lines) if index not in lines_to_remove)
+    text = _drop_devanagari_lines(text)
     text = re.sub(r"\n{3,}", "\n\n", text).strip()
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -145,6 +156,44 @@ def _drop_devanagari_lines(text: str) -> str:
     if any(line.strip() for line in kept):
         return "\n".join(kept)
     return text
+
+
+# Lines that unambiguously start the English version of a gazette notification /
+# regulation (the Hindi version never contains these English strings).
+_ENGLISH_START_RE = re.compile(
+    r"(?:MINISTRY OF HEALTH AND FAMILY WELFARE"
+    r"|FOOD SAFETY AND STANDARDS AUTHORITY OF INDIA"
+    r"|^NOTIFICATION$"
+    r"|F\.?\s*No\."
+    r"|hereby makes the following"
+    r"|Whereas\s+the\s+draft)",
+    re.IGNORECASE,
+)
+
+
+def _first_english_start(lines: list[str], normalized) -> int | None:
+    """Index of the first clearly-English notification/regulation start line."""
+    for index, line in enumerate(lines):
+        if _ENGLISH_START_RE.search(normalized(line)):
+            return index
+    return None
+
+
+def _cut_leading_hindi(lines: list[str], normalized) -> list[str]:
+    """Drop the Hindi block that precedes the English notification/regulation.
+
+    Gazettes print the Hindi version first and the English version second, and
+    the Hindi may be real Devanagari or a legacy-font transliteration. The block
+    is cut only when Devanagari actually appears *before* the English start, so an
+    already-English document (for example a consolidated compendium) is untouched.
+    """
+    hindi_indexes = [index for index, line in enumerate(lines) if _DEVANAGARI_RE.search(line)]
+    if not hindi_indexes:
+        return lines
+    start = _first_english_start(lines, normalized)
+    if start is None or not any(index < start for index in hindi_indexes):
+        return lines
+    return lines[start:]
 
 
 def cleanup_amendment(md_path: str | Path, output_md_path: str | Path) -> None:

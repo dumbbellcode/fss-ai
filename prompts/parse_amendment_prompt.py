@@ -28,7 +28,11 @@ You are provided with a document that has a set of amendments across multiple se
 The document will have a line like, 'New Delhi, 10 June 2026'.
 You have to write that date in 'YYYY-MM-DD' format.
 
-You will find all the changes in numbered bullet points.
+You will find the changes in numbered clauses ("1.", "2."), lettered sub-items ("(A)", "(B)", "(a)", "(b)"),
+and instructions such as "in regulation <X> ... shall be substituted", "after regulation <X> ... shall be
+inserted", or "the following Schedule/Appendix shall be substituted". Treat an uppercase lettered sub-item
+("(A)", "(B)") as a change even when its parent clause (for example "2. In the Food Safety and Standards
+(...) regulations, 2011,-") is only a stem with no target of its own.
 Each array item should either be amendment for a subregulation or  a schedule or a form. Copy the amendment_text as it is from the text. 
 amendment_text must contain the complete amendment instruction verbatim, starting with its
 original lead-in (for example, "in Schedule ..." or "in regulation ..."). Do not summarize,
@@ -46,4 +50,16 @@ Rules to disambiguate the target of each change:
 4. Each change must populate exactly one target: (regulation + subregulation), schedule (+ annexure/form), or form.
 5. Every change object must include all six fields: regulation, subregulation, schedule, annexure, form, and amendment_text.
    Use null for target fields that do not apply; do not omit any field.
+6. Whole-section insertion/substitution: when a clause inserts or substitutes a whole new section
+   (e.g. "after regulation 3.3 ... the following shall be inserted, namely:-" followed by a new regulation
+   numbered "3.4 ...") or a whole new Schedule/Appendix, add one change for it. Set regulation to the new
+   section number (e.g. "3.4") when it is clearly stated, or annexure/schedule to the new appendix/schedule
+   name (e.g. "Appendix C"); if the new target cannot be determined, leave the target fields null. Begin
+   amendment_text with the lead-in instruction sentence and include the new heading.
+7. Only when the inserted body is too large to reproduce within the output limit (for example a very long
+   quoted table or appendix), it is acceptable to keep the lead-in instruction sentence and the new heading
+   and stop early; do not summarize, invent, or renumber the omitted rows. Never return an empty "changes"
+   list when the document contains at least one insert or substitute instruction. Do not create a change for
+   "1. Short title and commencement".
+
 """

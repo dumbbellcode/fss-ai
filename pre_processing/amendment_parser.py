@@ -40,28 +40,56 @@ load_dotenv()
 _encoding = tiktoken.get_encoding("cl100k_base")
 
 # Breakpoints are the starts of complete amendment blocks only: top-level
-# clause headers ("2. In the Food Safety and Standards ...", "1. Short title...")
-# and change items ("(1) in regulation ...", "- (a) in ..."). A block is never
-# split, so each amendment's text stays in one chunk.
+# clause headers ("2. In the Food Safety and Standards ...", "1. Short title..."),
+# change items ("(1) in regulation ...", "- (a) in ..."), and structural
+# headings inside an inserted block ("## 3.2.9 Preservatives", "## 1. Sodium
+# alginate:"). A block is never split, so each amendment's text stays in one
+# chunk.
+#
+# NOTE: the top-level pattern deliberately does NOT include a bare
+# ``\d+\.\s+\([A-Z]\)\s+(?:for|in)`` alternative. Combined with ``re.IGNORECASE``
+# it matched ordinary in-list sub-items such as "2. (a) in raw form" or
+# "4. (c) in un-ground form" and cut a single subregulation across several
+# chunks (losing content). Those lettered sub-items are handled by the
+# change-item and subregulation markers below instead.
 _TOP_LEVEL_MARKER_RE = re.compile(
-    r"(?m)^[ \t]*\d+\.\s+(?:In\s+the\s+Food\s+Safety|Short\s+title|\(\d+\)\s+These\s+regulations|\([A-Z]\)\s+(?:for|in)|These\s+regulations)",
+    r"(?m)^[ \t]*\d+\.\s+(?:In\s+the\s+Food\s+Safety|Short\s+title|\(\d+\)\s+These\s+regulations|These\s+regulations)",
     re.IGNORECASE,
 )
-_CHANGE_ITEM_MARKER_RE = re.compile(r"(?m)^[ \t]*-?[ \t]*(?:\(\d+\)|\([a-z]\))[ \t]+(?=(?:in|In)\b)")
+# Change items: "(1) in regulation ...", "- (a) for ...", "- (A) in Chapter ...",
+# "(B) after APPENDIX ...". Lettered sub-items may be upper or lower case and the
+# lead-in may be "in" or "after"; case-folding here is safe because the lookahead
+# still requires one of those two words.
+_CHANGE_ITEM_MARKER_RE = re.compile(
+    r"(?m)^[ \t]*-?[ \t]*(?:\(\d+\)|\([a-zA-Z]\))[ \t]+(?=(?:in|after)\b)",
+    re.IGNORECASE,
+)
+# Structural headings inside a notification body, e.g. "## '3.2.9 Preservatives",
+# "## 3.2.10 Acidity regulator", "## 1. Sodium alginate:". Keeping these as
+# boundaries stops a chunk from splitting in the middle of one subregulation.
+_SUBREGULATION_MARKER_RE = re.compile(
+    r"(?m)^[ \t]*#{1,6}[ \t]*'?[ \t]*(?:\d+\.\d+|\d+\.[ \t]+[A-Za-z])"
+)
 
 _SEMANTIC_MARKERS: list[re.Pattern] = [
     _TOP_LEVEL_MARKER_RE,
     _CHANGE_ITEM_MARKER_RE,
+    _SUBREGULATION_MARKER_RE,
 ]
 
 
 def _marker_spans(document: str, patterns: list[re.Pattern]) -> list[tuple[int, int]]:
-    """Return (start, end) of every marker match, in document order."""
-    spans: list[tuple[int, int]] = []
+    """Return (start, end) of every marker match, in document order.
+
+    Patterns can overlap (e.g. a line matching both the top-level and the
+    subregulation marker), so matches are de-duplicated by start offset to avoid
+    producing empty blocks.
+    """
+    ends: dict[int, int] = {}
     for pattern in patterns:
-        spans.extend((match.start(), match.end()) for match in pattern.finditer(document))
-    spans.sort(key=lambda pair: pair[0])
-    return spans
+        for match in pattern.finditer(document):
+            ends[match.start()] = max(match.end(), ends.get(match.start(), 0))
+    return [(start, ends[start]) for start in sorted(ends)]
 
 
 def _force_split_oversized(text: str, max_tokens: int) -> list[str]:

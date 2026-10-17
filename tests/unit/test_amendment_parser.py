@@ -8,8 +8,13 @@ import tiktoken
 from pre_processing.amendment_parser import (
     AmendmentItem,
     AmendmentList,
+    _CHANGE_ITEM_MARKER_RE,
+    _SUBREGULATION_MARKER_RE,
+    _TOP_LEVEL_MARKER_RE,
     _invoke_amendment,
+    _marker_spans,
     _restore_truncated_text,
+    _SEMANTIC_MARKERS,
     _split_amendment_document,
     _strip_json_fences,
     parse_amendment,
@@ -163,6 +168,63 @@ def test_strip_json_fences_unwraps_code_block():
     assert _strip_json_fences('```json\n{"a": 1}\n```') == '{"a": 1}'
     assert _strip_json_fences('```\n{"a": 1}\n```') == '{"a": 1}'
     assert _strip_json_fences('{"a": 1}') == '{"a": 1}'
+
+
+def test_top_level_marker_ignores_lettered_sub_items():
+    # In-list sub-items like "2. (a) in raw form" are NOT amendment boundaries.
+    assert not _TOP_LEVEL_MARKER_RE.search("2. (a) in raw form, is dried gummy exudation;\n")
+    assert not _TOP_LEVEL_MARKER_RE.search("4. (c) in un-ground form, is flattened;\n")
+    assert not _TOP_LEVEL_MARKER_RE.search("5. (a) for food products;\n")
+    # Real top-level clause headers still match.
+    assert _TOP_LEVEL_MARKER_RE.search("2. In the Food Safety and Standards regulations, 2011,-\n")
+    assert _TOP_LEVEL_MARKER_RE.search("1. Short  title  and  commencement.\n")
+
+
+def test_change_item_marker_matches_lettered_items_and_after():
+    assert _CHANGE_ITEM_MARKER_RE.search("- (A) in Chapter 3, after regulation 3.3\n")
+    assert _CHANGE_ITEM_MARKER_RE.search("(B) after APPENDIX B, the following shall be inserted\n")
+    assert _CHANGE_ITEM_MARKER_RE.search("- (a) in regulation 2.2\n")
+    # "insert" must not be mistaken for the "in" lead-in.
+    assert not _CHANGE_ITEM_MARKER_RE.search("- (a) insert a new clause\n")
+
+
+def test_subregulation_marker_matches_structural_headings():
+    assert _SUBREGULATION_MARKER_RE.search("## '3.2.9.  Preservatives:\n")
+    assert _SUBREGULATION_MARKER_RE.search("## 3.2.10 Acidity regulator\n")
+    assert _SUBREGULATION_MARKER_RE.search("## 1. Sodium alginate:\n")
+    assert not _SUBREGULATION_MARKER_RE.search("a plain prose line with no heading\n")
+
+
+def test_marker_spans_dedupes_overlapping_starts():
+    document = "2. In the Food Safety and Standards regulations, 2011,-\nnext line\n"
+    spans = _marker_spans(document, _SEMANTIC_MARKERS)
+    starts = [start for start, _ in spans]
+    assert starts == sorted(starts)
+    assert len(starts) == len(set(starts))
+
+
+def test_split_keeps_one_subregulation_together_and_is_lossless():
+    prefix = "## NOTIFICATION\nNew Delhi, the 1st January, 2025\n"
+    body = (
+        "## 6. Tragacanth gum:\n"
+        "- (1) Tragacanth gum,-\n"
+        "2. (a) in raw form, is dried gummy exudation;\n"
+        "3. (b) in powdered form shall be in white colour;\n"
+        "4. (c) in un-ground form, is flattened;\n"
+        "| 11 | Arsenic, mg/kg, Max | 3.0 |\n"
+        "## 7. Acacia:\n"
+        "- (1) Acacia shall conform to the table below.\n"
+    )
+    document = prefix + body
+
+    chunks = _split_amendment_document(document, 40)
+
+    # Rebuild the body by dropping the repeated prefix; nothing may be lost.
+    rebuilt = ""
+    for chunk in chunks:
+        assert chunk.startswith(prefix)
+        rebuilt += chunk[len(prefix):]
+    assert rebuilt == body
 
 
 def test_invoke_amendment_falls_back_to_plain_json_on_length_error():

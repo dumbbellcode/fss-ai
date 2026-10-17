@@ -52,6 +52,8 @@ def _notification_header_index(lines: list[str], normalized) -> int | None:
     3. A ``NOTIFICATION`` line alone followed by a date line such as
        ``New Delhi, the 4 th November, 2015`` (no authority heading, e.g. when
        the ministry heading sits above it).
+
+    When none of these match, fall back to :func:`_english_notification_index`.
     """
     heading = r"(?:#{1,6}\s*)?"
     authority_body = r"\(?\s*FOOD SAFETY AND STANDARDS AUTHORITY OF INDIA\s*\)?"
@@ -75,7 +77,74 @@ def _notification_header_index(lines: list[str], normalized) -> int | None:
                 next_index += 1
             if next_index < len(lines) and notification.match(normalized(lines[next_index])):
                 return index
+    return _english_notification_index(lines, normalized)
+
+
+_DEVANAGARI_RE = re.compile(r"[\u0900-\u097F]")
+_ASCII_LETTER_RE = re.compile(r"[A-Za-z]")
+# English-only anchors for the notification. The Hindi version writes New Delhi as
+# "नई दिल्ली" and never uses the FSSAI preamble, so these never occur in a Hindi
+# block. Docling sometimes merges a Hindi fragment into the English authority /
+# "NOTIFICATION" line and/or separates "New Delhi, the <date>" from the heading by
+# several Hindi lines, which defeats the strict shapes above.
+_ENGLISH_DATE_RE = re.compile(r"New Delhi,\s+the\b[^\n]*\b(?:19|20)\d{2}\b", re.IGNORECASE)
+_ENGLISH_NOTICE_RE = re.compile(
+    r"(?:FOOD SAFETY AND STANDARDS AUTHORITY OF INDIA|\bNOTIFICATION\b|\bF\.?\s*No\.)",
+    re.IGNORECASE,
+)
+
+
+def _english_notification_index(lines: list[str], normalized) -> int | None:
+    """Locate the start of the English notification by its English-only anchors.
+
+    Anchors on the English date line (``New Delhi, the <date>``) or an English
+    authority/``NOTIFICATION``/``F. No.`` marker, then walks back over adjacent
+    English/blank lines to keep the English preamble. Stops at any line that
+    contains Devanagari so it cannot run back into the Hindi block.
+    """
+    for index, line in enumerate(lines):
+        text = normalized(line)
+        if not (_ENGLISH_DATE_RE.search(text) or _ENGLISH_NOTICE_RE.search(text)):
+            continue
+        # An anchor must be at least partly English (skip pure-Devanagari lines).
+        if _DEVANAGARI_RE.search(text) and not _ASCII_LETTER_RE.search(text):
+            continue
+        start = index
+        back = index - 1
+        while back >= 0 and index - back <= 8:
+            candidate = normalized(lines[back])
+            if not candidate:
+                back -= 1
+                continue
+            if _DEVANAGARI_RE.search(candidate):
+                break
+            start = back
+            back -= 1
+        return start
     return None
+
+
+def _drop_devanagari_lines(text: str) -> str:
+    """Remove lines whose letters are mostly Devanagari.
+
+    After cutting at the English notification, docling can leave stray Hindi
+    fragments at the seam; some notifications also interleave the Hindi and
+    English text line by line. A line is dropped only when it contains Devanagari
+    and has more Devanagari letters than Latin ones, so mixed lines that carry an
+    English header/citation (where Latin letters dominate) are kept. If dropping
+    would leave almost nothing, the text is returned unchanged to avoid ever
+    producing an empty document.
+    """
+    kept = []
+    for line in text.split("\n"):
+        devanagari = len(_DEVANAGARI_RE.findall(line))
+        latin = len(_ASCII_LETTER_RE.findall(line))
+        if devanagari and devanagari > latin:
+            continue
+        kept.append(line)
+    if any(line.strip() for line in kept):
+        return "\n".join(kept)
+    return text
 
 
 def cleanup_amendment(md_path: str | Path, output_md_path: str | Path) -> None:
@@ -119,6 +188,7 @@ def cleanup_amendment(md_path: str | Path, output_md_path: str | Path) -> None:
     text = "\n".join(
         line.rstrip() for index, line in enumerate(lines) if index not in header_indexes
     )
+    text = _drop_devanagari_lines(text)
     text = re.sub(r"\n{3,}", "\n\n", text).strip()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(f"{text}\n", encoding="utf-8")

@@ -1,3 +1,5 @@
+import re
+
 from pre_processing.cleanup_markdown import cleanup_amendment
 
 
@@ -113,3 +115,86 @@ def test_notification_header_parenthesized_authority(tmp_path):
         tmp_path,
         "## (Food Safety and Standards Authority of India) NOTIFICATION",
     )
+
+
+def _hindi_line():
+    return "िकसी िवभाग का पाठ यहाँ िलखा गया है"
+
+
+def test_cleanup_cuts_hindi_block_before_english_date(tmp_path):
+    source = tmp_path / "amendment.md"
+    output = tmp_path / "cleaned.md"
+    source.write_text(
+        "Cover page\n"
+        + "\n".join(_hindi_line() for _ in range(6))
+        + "\n"
+        "New Delhi, the 29th  January , 2019\n"
+        "F. No. 02-01/Enf-1(1)/FSSAI-2012.- Whereas the draft of certain regulations\n"
+        "Amendment body\n",
+        encoding="utf-8",
+    )
+
+    cleanup_amendment(source, output)
+
+    cleaned = output.read_text(encoding="utf-8")
+    assert cleaned.startswith("New Delhi, the 29th  January , 2019")
+    assert "Amendment body" in cleaned
+    assert not re.search(r"[\u0900-\u097F]", cleaned)
+
+
+def test_cleanup_handles_header_merged_into_hindi_line(tmp_path):
+    # Docling merges a Hindi fragment with the English authority/date line
+    # (files 28/29 shape). The mixed line is kept, but the Hindi-only lines go.
+    source = tmp_path / "amendment.md"
+    output = tmp_path / "cleaned.md"
+    source.write_text(
+        "Cover page\n"
+        + "\n".join(_hindi_line() for _ in range(5))
+        + "\n"
+        "फा. सं. मानक/एम एंड एमपी/ 2018। MINISTRY OF HEALTH AND FAMILY WELFARE "
+        "(FOOD SAFETY AND STANDARDS AUTHORITY OF INDIA) NOTIFICATION New Delhi, the 29th January, 2019.\n"
+        "And whereas the copies of the said official Gazette were made available.\n"
+        "Amendment body\n",
+        encoding="utf-8",
+    )
+
+    cleanup_amendment(source, output)
+
+    cleaned = output.read_text(encoding="utf-8")
+    assert "MINISTRY OF HEALTH AND FAMILY WELFARE" in cleaned
+    assert "Amendment body" in cleaned
+    assert cleaned.count("\n".join([_hindi_line()])) == 0  # no Hindi-only line survives
+
+
+def test_cleanup_removes_trailing_hindi_block(tmp_path):
+    source = tmp_path / "amendment.md"
+    output = tmp_path / "cleaned.md"
+    source.write_text(
+        "## FOOD SAFETY AND STANDARDS AUTHORITY OF INDIA NOTIFICATION\n"
+        "\n"
+        "New Delhi, the 1st January, 2025\n"
+        "\n"
+        "Amendment body line one\n"
+        "Amendment body line two\n"
+        + "\n".join(_hindi_line() for _ in range(4))
+        + "\n",
+        encoding="utf-8",
+    )
+
+    cleanup_amendment(source, output)
+
+    cleaned = output.read_text(encoding="utf-8")
+    assert cleaned.startswith("## FOOD SAFETY AND STANDARDS AUTHORITY OF INDIA NOTIFICATION")
+    assert "Amendment body line two" in cleaned
+    assert _hindi_line() not in cleaned
+    assert not re.search(r"[\u0900-\u097F]", cleaned)
+
+
+def test_cleanup_never_empties_a_devanagari_only_document(tmp_path):
+    source = tmp_path / "amendment.md"
+    output = tmp_path / "cleaned.md"
+    source.write_text("\n".join(_hindi_line() for _ in range(8)) + "\n", encoding="utf-8")
+
+    cleanup_amendment(source, output)
+
+    assert output.read_text(encoding="utf-8").strip()

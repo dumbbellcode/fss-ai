@@ -273,13 +273,18 @@ def _has_change_instructions(part: str) -> bool:
 def _has_elision(text: str) -> bool:
     """Whether an amendment text uses an ellipsis to abbreviate (model laziness).
 
-    Verbatim instruction blobs are long and multi-line; a short single-line text
-    that contains ``...`` or ``…`` is the model refusing to copy the source, for
-    example ``"Now, therefore, ... makes the following regulations ..."``.
+    Verbatim instruction blobs are long and multi-line, so a short single-line
+    text that contains ``...``/``…`` is the model refusing to copy the source
+    (``"Now, therefore, ... makes the following regulations ..."``). A text that
+    simply *ends* with an ellipsis is truncated regardless of its length, because
+    real amendment text never finishes on ``...``.
     """
-    if not re.search(r"(?:\.\.\.|…)", text):
+    stripped = text.strip()
+    if not re.search(r"(?:\.\.\.|…)", stripped):
         return False
-    return text.count("\n") <= 1 and len(text) <= 1500
+    if stripped.endswith(("...", "…")):
+        return True
+    return stripped.count("\n") <= 1 and len(stripped) <= 1500
 
 
 def _result_is_degenerate(result: AmendmentList, part: str) -> bool:

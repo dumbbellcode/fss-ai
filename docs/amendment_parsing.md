@@ -44,6 +44,34 @@ Result on reg-02: Hindi-dominant lines went from 2124→8 (file 48), 628→1 (29
 etc.; only 8/160 files keep any Devanagari, and those are single mixed header
 lines (intentional).
 
+### The main `Regulation.md` / `Compendium.md` are bilingual too
+
+`cleanup_regulation` originally only removed the two gazette header strings, so
+every bilingual regulation file kept its **entire leading Hindi block** — 15–33%
+of the file was Devanagari (07: 15059 chars, 08: 36804, 20: 38633, 27: 58989).
+The Hindi is sometimes real Devanagari and sometimes a **legacy-font
+transliteration** (`vlk/kj.k`, `Hkkx III[k.M 4`, `ubZ fnYyh]`) that no Devanagari
+check can see.
+
+`cleanup_regulation` now runs the same two steps as the amendment cleaner:
+`_cut_leading_hindi` cuts everything before the first English
+notification/regulation start (`MINISTRY OF HEALTH AND FAMILY WELFARE`,
+`FOOD SAFETY AND STANDARDS AUTHORITY OF INDIA`, `F. No.`, `hereby makes the
+following`, `Whereas the draft`), then `_drop_devanagari_lines` removes stray
+Devanagari lines. The cut is **skipped when no Devanagari appears before the
+English start**, so an already-English compendium (02's 1.29 M-char file) is
+byte-identical. Verified deva→0 for 06–10, 20, 27 while 02 changed only by the
+gazette-header removal.
+
+Watch-outs found while auditing:
+
+- The gazette order is Hindi-first, English-second, so a plain cut works; but the
+  odd file interleaves (10 keeps a Devanagari line *after* the English start) —
+  hence the follow-up `_drop_devanagari_lines` sweep is required, not optional.
+- `_drop_devanagari_lines` treats a line as Hindi only when Devanagari letters
+  outnumber Latin ones. Legacy-font Hindi is pure ASCII, so it is only removed by
+  the leading-block cut, never by the sweep.
+
 ## Parse stage — chunking (`_split_amendment_document`)
 
 Documents are split at *amendment-block boundaries* so one amendment's text never
